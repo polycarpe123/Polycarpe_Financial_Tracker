@@ -75,9 +75,6 @@ async function loadUserData() {
     if (!currentUser) return;
     
     try {
-        // Show loading state
-        showLoadingState();
-        
         // Load user profile
         const profileResult = await getUserProfile(currentUser.uid);
         if (profileResult.success) {
@@ -106,11 +103,8 @@ async function loadUserData() {
             transactions = transactionsResult.data;
             renderTransactions();
         }
-        
-        hideLoadingState();
     } catch (error) {
         console.error('Error loading user data:', error);
-        hideLoadingState();
     }
 }
 
@@ -370,6 +364,7 @@ async function handleAuthSubmit(formData) {
     
     const isSignUp = document.querySelector('.auth-tabs .tab.active')?.textContent.trim() === 'Create Account';
     
+    // Show loading only during auth operations
     showLoadingState();
     
     let result;
