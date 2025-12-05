@@ -7,13 +7,13 @@
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
-    <!-- TOP NAVIGATION BAR - Add this right after <body> tag and before .app-container -->
+    <!-- TOP NAVIGATION BAR -->
 <div class="top-nav">
     <div class="top-nav-title" id="pageTitle">Transactions</div>
     <div class="top-nav-user">
         <div class="user-info">
-            <div class="user-name" id="topNavUserName">John Doe</div>
-            <div class="user-email" id="topNavUserEmail">john@example.com</div>
+            <div class="user-name" id="topNavUserName">Loading...</div>
+            <div class="user-email" id="topNavUserEmail">Loading...</div>
         </div>
         <div class="profile-container">
             <button class="profile-btn">
@@ -24,8 +24,8 @@
             </button>
             <div class="profile-dropdown">
                 <div class="profile-info">
-                    <div class="profile-name" id="dropdownUserName">John Doe</div>
-                    <div class="profile-email" id="dropdownUserEmail">john@example.com</div>
+                    <div class="profile-name" id="dropdownUserName">Loading...</div>
+                    <div class="profile-email" id="dropdownUserEmail">Loading...</div>
                 </div>
                 <hr>
                 <button class="profile-signout-btn">
@@ -40,6 +40,7 @@
         </div>
     </div>
 </div>
+
     <!-- Mobile Header -->
 <header class="mobile-header">
     <button class="mobile-menu-toggle">
@@ -136,66 +137,15 @@
                     <label>Category</label>
                     <select>
                         <option>All Categories</option>
-                        <option>Food</option>
-                        <option>Salary</option>
-                        <option>Entertainment</option>
-                        <option>Transportation</option>
                     </select>
                 </div>
                 
                 <button class="btn-primary">+ Add Transaction</button>
             </div>
             
+            <!-- Empty transaction list - will be populated by JavaScript -->
             <div class="transaction-list">
-                <div class="transaction-item">
-                    <div class="transaction-icon">↗</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">Monthly Salary</div>
-                        <div class="transaction-category">Salary</div>
-                    </div>
-                    <div class="transaction-amount positive">+$5,000.00</div>
-                    <div class="transaction-date">Nov 29</div>
-                </div>
-                
-                <div class="transaction-item">
-                    <div class="transaction-icon">🍴</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">Coffee Shop</div>
-                        <div class="transaction-category">Food</div>
-                    </div>
-                    <div class="transaction-amount negative">-$500</div>
-                    <div class="transaction-date">Nov 30</div>
-                </div>
-                
-                <div class="transaction-item">
-                    <div class="transaction-icon">🍴</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">Grocery Store</div>
-                        <div class="transaction-category">Food</div>
-                    </div>
-                    <div class="transaction-amount negative">$-500</div>
-                    <div class="transaction-date">Dec 1</div>
-                </div>
-                
-                <div class="transaction-item">
-                    <div class="transaction-icon">📺</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">Netflix Subscription</div>
-                        <div class="transaction-category">Entertainment</div>
-                    </div>
-                    <div class="transaction-amount negative">-$500</div>
-                    <div class="transaction-date">Dec 1</div>
-                </div>
-                
-                <div class="transaction-item">
-                    <div class="transaction-icon">💼</div>
-                    <div class="transaction-details">
-                        <div class="transaction-name">Freelance Project</div>
-                        <div class="transaction-category">Freelance</div>
-                    </div>
-                    <div class="transaction-amount positive">+$1,000.00</div>
-                    <div class="transaction-date">Nov 26</div>
-                </div>
+                <p style="text-align: center; color: #6b7280; padding: 40px;">No transactions yet. Add your first transaction!</p>
             </div>
         </main>
     </div>
@@ -224,17 +174,13 @@
                 <div class="form-group">
                     <label>Category *</label>
                     <select>
-                        <option>Salary</option>
-                        <option>Food</option>
-                        <option>Entertainment</option>
-                        <option>Transportation</option>
-                        <option>Utilities</option>
+                        <option>Loading...</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
                     <label>Date *</label>
-                    <input type="date" value="2025-12-01">
+                    <input type="date" value="2025-12-05">
                 </div>
                 
                 <div class="form-group">
