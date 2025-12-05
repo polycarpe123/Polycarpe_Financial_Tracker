@@ -27,6 +27,7 @@ let categories = [];
 let transactions = [];
 let currentEditId = null;
 let categoryToDelete = null;
+let currentTransactionType = 'expense';
 
 // DOM Elements
 const authTabs = document.querySelectorAll('.auth-tabs .tab');
@@ -48,12 +49,18 @@ onAuthStateChanged(auth, async (user) => {
         currentUser = user;
         console.log('User signed in:', user.email);
         
-        // Load user data
-        await loadUserData();
-        
         // If on auth page, redirect to dashboard
         if (document.querySelector('.landing-page')) {
             window.location.href = 'Dashboard.html';
+        } else {
+            // Show loading state immediately
+            showPageLoadingState();
+            
+            // Load user data
+            await loadUserData();
+            
+            // Hide loading state after data is loaded
+            hidePageLoadingState();
         }
     } else {
         // User is signed out
@@ -102,6 +109,7 @@ async function loadUserData() {
         if (transactionsResult.success) {
             transactions = transactionsResult.data;
             renderTransactions();
+            updateDashboardStats();
         }
     } catch (error) {
         console.error('Error loading user data:', error);
@@ -133,6 +141,44 @@ function updateUIWithUserProfile(profile) {
     if (emailInput) emailInput.value = profile.email;
 }
 
+function updateDashboardStats() {
+    // Calculate stats from transactions
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    let totalBalance = 0;
+    let monthlyIncome = 0;
+    let monthlyExpense = 0;
+    
+    transactions.forEach(transaction => {
+        const transactionDate = new Date(transaction.date);
+        const amount = parseFloat(transaction.amount);
+        
+        if (transaction.type === 'income') {
+            totalBalance += amount;
+            if (transactionDate.getMonth() === currentMonth && 
+                transactionDate.getFullYear() === currentYear) {
+                monthlyIncome += amount;
+            }
+        } else {
+            totalBalance -= amount;
+            if (transactionDate.getMonth() === currentMonth && 
+                transactionDate.getFullYear() === currentYear) {
+                monthlyExpense += amount;
+            }
+        }
+    });
+    
+    // Update stat cards
+    const statValues = document.querySelectorAll('.stat-value');
+    if (statValues.length >= 3) {
+        statValues[0].textContent = `$${totalBalance.toFixed(2)}`;
+        statValues[1].textContent = `$${monthlyIncome.toFixed(2)}`;
+        statValues[2].textContent = `$${monthlyExpense.toFixed(2)}`;
+    }
+}
+
 function showLoadingState() {
     // Add a loading overlay
     const loadingDiv = document.createElement('div');
@@ -158,8 +204,79 @@ function hideLoadingState() {
     if (loadingDiv) loadingDiv.remove();
 }
 
+// New functions for page loading state
+function showPageLoadingState() {
+    // Hide main content immediately
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.visibility = 'hidden';
+        mainContent.style.opacity = '0';
+    }
+    
+    // Show full-page loading overlay
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'page-loading-overlay';
+    loadingDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #f9fafb;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    `;
+    loadingDiv.innerHTML = `
+        <div style="text-align: center;">
+            <div style="width: 60px; height: 60px; margin: 0 auto 20px; border: 4px solid #e5e7eb; border-top: 4px solid #10b981; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="font-size: 18px; color: #10b981; font-weight: 500;">Loading your data...</p>
+        </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    `;
+    document.body.appendChild(loadingDiv);
+}
+
+function hidePageLoadingState() {
+    const loadingDiv = document.getElementById('page-loading-overlay');
+    if (loadingDiv) {
+        // Fade out the loading overlay
+        loadingDiv.style.transition = 'opacity 0.3s ease';
+        loadingDiv.style.opacity = '0';
+        
+        setTimeout(() => {
+            loadingDiv.remove();
+        }, 300);
+    }
+    
+    // Show main content with fade in
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.transition = 'opacity 0.3s ease';
+        mainContent.style.visibility = 'visible';
+        mainContent.style.opacity = '1';
+    }
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
+    // Only initialize page loading for non-auth pages
+    if (!document.querySelector('.landing-page')) {
+        // Hide content initially to prevent flash of old data
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            mainContent.style.visibility = 'hidden';
+            mainContent.style.opacity = '0';
+        }
+    }
+    
     initAuthTabs();
     initTransactionTabs();
     initMobileMenu();
@@ -247,6 +364,7 @@ function initMobileMenu() {
                 e.preventDefault();
                 const signoutModal = document.querySelector('.signout-modal');
                 if (signoutModal) {
+                    signoutModal.classList.add('show');
                     signoutModal.style.display = 'flex';
                     document.body.style.overflow = 'hidden';
                     profileDropdown.classList.remove('show');
@@ -258,45 +376,48 @@ function initMobileMenu() {
 
 // Modal Management
 function initModals() {
+    // Add Transaction buttons
     addTransactionBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             if (this.textContent.includes('Add Transaction')) {
                 e.preventDefault();
-                const modal = document.querySelector('.modal-overlay:not(.signout-modal)');
-                if (modal) {
-                    modal.style.display = 'flex';
-                    document.body.style.overflow = 'hidden';
-                }
+                openTransactionModal();
             }
         });
     });
     
+    // Sign out buttons
     signOutBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
             const signoutModal = document.querySelector('.signout-modal');
             if (signoutModal) {
+                signoutModal.classList.add('show');
                 signoutModal.style.display = 'flex';
                 document.body.style.overflow = 'hidden';
             }
         });
     });
     
+    // Close buttons
     const closeBtns = document.querySelectorAll('.close-btn, .btn-secondary');
     closeBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             const modal = this.closest('.modal-overlay');
             if (modal) {
                 e.preventDefault();
+                modal.classList.remove('show');
                 modal.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
         });
     });
     
+    // Click outside to close
     modalOverlays.forEach(overlay => {
         overlay.addEventListener('click', function(e) {
             if (e.target === this) {
+                this.classList.remove('show');
                 this.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
@@ -317,6 +438,46 @@ function initModals() {
                 alert('Error signing out: ' + result.error);
             }
         });
+    }
+}
+
+// New function to open transaction modal
+function openTransactionModal() {
+    // Try multiple selectors to find the transaction modal
+    let modal = document.getElementById('transaction-modal');
+    if (!modal) {
+        modal = document.querySelector('.modal-overlay:not(.signout-modal):not(#delete-modal):not(#category-modal)');
+    }
+    
+    if (modal) {
+        // Reset form
+        const form = modal.querySelector('form');
+        if (form) form.reset();
+        
+        // Set default date to today
+        const dateInput = modal.querySelector('input[type="date"]');
+        if (dateInput) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.value = today;
+        }
+        
+        // Reset transaction type to expense
+        currentTransactionType = 'expense';
+        const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
+        tabs.forEach(tab => {
+            if (tab.textContent.trim().toLowerCase() === 'expense') {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+        
+        // Show modal
+        modal.classList.add('show');
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    } else {
+        console.error('Transaction modal not found');
     }
 }
 
@@ -351,9 +512,32 @@ function initForms() {
             if (!result.success) {
                 alert('Error signing in with Google: ' + result.error);
             }
-            // Auth state observer will handle redirect
         });
     }
+    
+    // Initialize transaction type tabs in modal
+    initTransactionTypeTabs();
+}
+
+// New function to handle transaction type tabs in modal
+function initTransactionTypeTabs() {
+    const modalTabs = document.querySelectorAll('.modal-overlay .transaction-type-tabs .tab');
+    
+    modalTabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            // Remove active from all tabs in this modal
+            const parentModal = this.closest('.modal-overlay');
+            const siblingTabs = parentModal.querySelectorAll('.transaction-type-tabs .tab');
+            siblingTabs.forEach(t => t.classList.remove('active'));
+            
+            // Add active to clicked tab
+            this.classList.add('active');
+            
+            // Update current transaction type
+            currentTransactionType = this.textContent.trim().toLowerCase();
+            console.log('Transaction type selected:', currentTransactionType);
+        });
+    });
 }
 
 // Auth Form Submission
@@ -364,7 +548,11 @@ async function handleAuthSubmit(formData) {
     
     const isSignUp = document.querySelector('.auth-tabs .tab.active')?.textContent.trim() === 'Create Account';
     
-    // Show loading only during auth operations
+    if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+    }
+    
     showLoadingState();
     
     let result;
@@ -379,24 +567,43 @@ async function handleAuthSubmit(formData) {
     if (!result.success) {
         alert('Error: ' + result.error);
     }
-    // Auth state observer will handle redirect
 }
 
-// Transaction Form Submission
+// Fixed Transaction Form Submission
 async function handleTransactionSubmit(formData) {
     if (!currentUser) {
         alert('Please sign in first');
         return;
     }
     
-    const amount = document.querySelector('.modal-dialog input[type="number"]')?.value;
-    const category = document.querySelector('.modal-dialog select')?.value;
-    const date = document.querySelector('.modal-dialog input[type="date"]')?.value;
-    const description = document.querySelector('.modal-dialog input[type="text"]')?.value;
-    const type = document.querySelector('.transaction-type-tabs .tab.active')?.textContent.trim().toLowerCase();
+    // Get the modal that contains the form
+    const modal = document.querySelector('.modal-overlay.show') || 
+                  document.getElementById('transaction-modal');
     
+    if (!modal) {
+        console.error('No active modal found');
+        return;
+    }
+    
+    // Get form inputs from the modal
+    const amountInput = modal.querySelector('input[type="number"]');
+    const categorySelect = modal.querySelector('select');
+    const dateInput = modal.querySelector('input[type="date"]');
+    const descriptionInput = modal.querySelector('input[type="text"]');
+    
+    const amount = amountInput?.value;
+    const category = categorySelect?.value;
+    const date = dateInput?.value;
+    const description = descriptionInput?.value;
+    
+    // Validate
     if (!amount || !category || !date || !description) {
         alert('Please fill in all required fields');
+        return;
+    }
+    
+    if (parseFloat(amount) <= 0) {
+        alert('Amount must be greater than 0');
         return;
     }
     
@@ -405,8 +612,10 @@ async function handleTransactionSubmit(formData) {
         category: category,
         date: date,
         description: description,
-        type: type
+        type: currentTransactionType
     };
+    
+    console.log('Submitting transaction:', transaction);
     
     showLoadingState();
     const result = await addTransaction(currentUser.uid, transaction);
@@ -414,11 +623,13 @@ async function handleTransactionSubmit(formData) {
     
     if (result.success) {
         // Close modal
-        const modal = document.querySelector('.modal-overlay:not(.signout-modal)');
-        if (modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+        
+        // Reset form
+        const form = modal.querySelector('form');
+        if (form) form.reset();
         
         // Reload transactions
         await loadUserData();
@@ -506,10 +717,10 @@ function initFileUpload() {
 
 // Export CSV
 function exportToCSV() {
-    let csv = 'Name,Category,Amount,Date\n';
+    let csv = 'Name,Category,Amount,Date,Type\n';
     
     transactions.forEach(transaction => {
-        csv += `${transaction.description},${transaction.category},${transaction.amount},${transaction.date}\n`;
+        csv += `${transaction.description},${transaction.category},${transaction.amount},${transaction.date},${transaction.type}\n`;
     });
     
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -878,6 +1089,7 @@ function initProfileDropdown() {
                 e.preventDefault();
                 const signoutModal = document.querySelector('.signout-modal');
                 if (signoutModal) {
+                    signoutModal.classList.add('show');
                     signoutModal.style.display = 'flex';
                     document.body.style.overflow = 'hidden';
                     profileContainer.classList.remove('active');
