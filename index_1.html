@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance - Personal Tracker</title>
-    <link rel="stylesheet" href="/index.css">
+    <title>Signup</title>
+    <link rel="stylesheet" href="index.css">
 </head>
 <body>
     <!-- Landing Page - Create Account -->
@@ -25,8 +25,8 @@
         </div>
         <div class="right-section">
             <div class="auth-tabs">
-                <button class="tab">Sign In</button>
-                <button class="tab active">Create Account</button>
+                  <a href="index.html"><button class="tab">Sign In</button></a>
+                  <button class="tab active">Create Account</button>
             </div>
             <form>
                 <label>Full Name</label>
@@ -64,6 +64,7 @@
         
         <a href="#signout" class="nav-item sign-out">Sign Out</a>
     </div>
-   <script src="index.js"></script>
+   <script type="module" src="firebase-config.js"></script>
+   <script type="module" src="index.js"></script>
 </body>
 </html>

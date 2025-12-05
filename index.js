@@ -1,4 +1,32 @@
-// Finance Tracker JavaScript
+// Finance Tracker JavaScript with Firebase Integration
+
+import { 
+    auth,
+    signUpUser,
+    signInUser,
+    signInWithGoogle,
+    signOutUser,
+    getUserProfile,
+    updateUserProfile,
+    getCategories,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    getTransactions,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+    initializeDefaultCategories
+} from './firebase-config.js';
+
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+
+// Global Variables
+let currentUser = null;
+let categories = [];
+let transactions = [];
+let currentEditId = null;
+let categoryToDelete = null;
 
 // DOM Elements
 const authTabs = document.querySelectorAll('.auth-tabs .tab');
@@ -10,6 +38,132 @@ const modalOverlays = document.querySelectorAll('.modal-overlay');
 const addTransactionBtns = document.querySelectorAll('.btn-primary');
 const signOutBtns = document.querySelectorAll('.sign-out');
 
+// ==========================================
+// AUTH STATE OBSERVER
+// ==========================================
+
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        // User is signed in
+        currentUser = user;
+        console.log('User signed in:', user.email);
+        
+        // Load user data
+        await loadUserData();
+        
+        // If on auth page, redirect to dashboard
+        if (document.querySelector('.landing-page')) {
+            window.location.href = 'Dashboard.html';
+        }
+    } else {
+        // User is signed out
+        currentUser = null;
+        console.log('User signed out');
+        
+        // If not on auth page, redirect to login
+        if (!document.querySelector('.landing-page')) {
+            window.location.href = 'index.html';
+        }
+    }
+});
+
+// ==========================================
+// LOAD USER DATA
+// ==========================================
+
+async function loadUserData() {
+    if (!currentUser) return;
+    
+    try {
+        // Show loading state
+        showLoadingState();
+        
+        // Load user profile
+        const profileResult = await getUserProfile(currentUser.uid);
+        if (profileResult.success) {
+            updateUIWithUserProfile(profileResult.data);
+        }
+        
+        // Load categories
+        const categoriesResult = await getCategories(currentUser.uid);
+        if (categoriesResult.success) {
+            categories = categoriesResult.data;
+            
+            // If no categories, initialize defaults
+            if (categories.length === 0) {
+                await initializeDefaultCategories(currentUser.uid);
+                const newCategoriesResult = await getCategories(currentUser.uid);
+                categories = newCategoriesResult.data;
+            }
+            
+            renderCategories();
+            loadCategoriesIntoDropdowns();
+        }
+        
+        // Load transactions
+        const transactionsResult = await getTransactions(currentUser.uid);
+        if (transactionsResult.success) {
+            transactions = transactionsResult.data;
+            renderTransactions();
+        }
+        
+        hideLoadingState();
+    } catch (error) {
+        console.error('Error loading user data:', error);
+        hideLoadingState();
+    }
+}
+
+// ==========================================
+// UI UPDATE FUNCTIONS
+// ==========================================
+
+function updateUIWithUserProfile(profile) {
+    // Update all user name elements
+    const userNameElements = document.querySelectorAll('#topNavUserName, #dropdownUserName');
+    userNameElements.forEach(el => {
+        if (el) el.textContent = profile.name;
+    });
+    
+    // Update all user email elements
+    const userEmailElements = document.querySelectorAll('#topNavUserEmail, #dropdownUserEmail');
+    userEmailElements.forEach(el => {
+        if (el) el.textContent = profile.email;
+    });
+    
+    // Update settings page if present
+    const nameInput = document.querySelector('.settings-section input[type="text"]');
+    if (nameInput) nameInput.value = profile.name;
+    
+    const emailInput = document.querySelector('.settings-section input[type="email"]');
+    if (emailInput) emailInput.value = profile.email;
+}
+
+function showLoadingState() {
+    // Add a loading overlay
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loading-overlay';
+    loadingDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.9);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    `;
+    loadingDiv.innerHTML = '<p style="font-size: 18px; color: #10b981;">Loading...</p>';
+    document.body.appendChild(loadingDiv);
+}
+
+function hideLoadingState() {
+    const loadingDiv = document.getElementById('loading-overlay');
+    if (loadingDiv) loadingDiv.remove();
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
     initAuthTabs();
@@ -19,18 +173,18 @@ document.addEventListener('DOMContentLoaded', function() {
     initForms();
     initSearch();
     initFilters();
+    initProfileDropdown();
+    initCategoriesPage();
+    initFileUpload();
 });
 
 // Auth Tabs Functionality
 function initAuthTabs() {
     authTabs.forEach(tab => {
         tab.addEventListener('click', function() {
-            // Remove active class from all tabs
             authTabs.forEach(t => t.classList.remove('active'));
-            // Add active class to clicked tab
             this.classList.add('active');
             
-            // Handle form switching (for pages with both sign in and create account)
             const isSignIn = this.textContent.trim() === 'Sign In';
             if (isSignIn) {
                 console.log('Switching to Sign In form');
@@ -56,7 +210,6 @@ function initTransactionTabs() {
 
 // Mobile Menu
 function initMobileMenu() {
-    // Open mobile menu
     if (mobileMenuToggle) {
         mobileMenuToggle.addEventListener('click', function() {
             mobileMenu.style.display = 'flex';
@@ -64,7 +217,6 @@ function initMobileMenu() {
         });
     }
     
-    // Close mobile menu
     if (mobileMenuClose) {
         mobileMenuClose.addEventListener('click', function() {
             mobileMenu.style.display = 'none';
@@ -72,7 +224,6 @@ function initMobileMenu() {
         });
     }
     
-    // Close menu when clicking nav items
     const mobileNavItems = mobileMenu?.querySelectorAll('.nav-item');
     mobileNavItems?.forEach(item => {
         item.addEventListener('click', function() {
@@ -81,43 +232,38 @@ function initMobileMenu() {
         });
     });
 
-    // Profile dropdown toggle
-const mobileUserIcon = document.querySelector('.mobile-user-icon');
-const profileDropdown = document.querySelector('.profile-dropdown');
+    const mobileUserIcon = document.querySelector('.mobile-user-icon');
+    const profileDropdown = document.querySelector('.profile-dropdown');
 
-if (mobileUserIcon && profileDropdown) {
-    mobileUserIcon.addEventListener('click', function(e) {
-        e.stopPropagation();
-        profileDropdown.classList.toggle('show');
-    });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('.mobile-user-icon') && !e.target.closest('.profile-dropdown')) {
-            profileDropdown.classList.remove('show');
-        }
-    });
-    
-    // Handle sign out from dropdown
-    const dropdownSignOut = profileDropdown.querySelector('.dropdown-signout');
-    if (dropdownSignOut) {
-        dropdownSignOut.addEventListener('click', function(e) {
-            e.preventDefault();
-            const signoutModal = document.querySelector('.signout-modal');
-            if (signoutModal) {
-                signoutModal.style.display = 'flex';
-                document.body.style.overflow = 'hidden';
+    if (mobileUserIcon && profileDropdown) {
+        mobileUserIcon.addEventListener('click', function(e) {
+            e.stopPropagation();
+            profileDropdown.classList.toggle('show');
+        });
+        
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.mobile-user-icon') && !e.target.closest('.profile-dropdown')) {
                 profileDropdown.classList.remove('show');
             }
         });
+        
+        const dropdownSignOut = profileDropdown.querySelector('.dropdown-signout');
+        if (dropdownSignOut) {
+            dropdownSignOut.addEventListener('click', function(e) {
+                e.preventDefault();
+                const signoutModal = document.querySelector('.signout-modal');
+                if (signoutModal) {
+                    signoutModal.style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                    profileDropdown.classList.remove('show');
+                }
+            });
+        }
     }
 }
-}
-
 
 // Modal Management
 function initModals() {
-    // Add Transaction Modal
     addTransactionBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             if (this.textContent.includes('Add Transaction')) {
@@ -131,7 +277,6 @@ function initModals() {
         });
     });
     
-    // Sign Out Modal
     signOutBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -143,7 +288,6 @@ function initModals() {
         });
     });
     
-    // Close modals
     const closeBtns = document.querySelectorAll('.close-btn, .btn-secondary');
     closeBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
@@ -156,7 +300,6 @@ function initModals() {
         });
     });
     
-    // Close modal when clicking overlay
     modalOverlays.forEach(overlay => {
         overlay.addEventListener('click', function(e) {
             if (e.target === this) {
@@ -169,9 +312,16 @@ function initModals() {
     // Confirm sign out
     const confirmSignOut = document.querySelector('.signout-modal .btn-danger');
     if (confirmSignOut) {
-        confirmSignOut.addEventListener('click', function() {
-            // Redirect to login page
-            window.location.href = 'index.html';
+        confirmSignOut.addEventListener('click', async function() {
+            showLoadingState();
+            const result = await signOutUser();
+            hideLoadingState();
+            
+            if (result.success) {
+                window.location.href = 'index.html';
+            } else {
+                alert('Error signing out: ' + result.error);
+            }
         });
     }
 }
@@ -184,7 +334,6 @@ function initForms() {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            // Get form data
             const formData = new FormData(this);
             const formType = this.closest('.landing-page') ? 'auth' : 'transaction';
             
@@ -195,54 +344,93 @@ function initForms() {
             }
         });
     });
+    
+    // Google Sign In Button
+    const googleBtn = document.querySelector('button[type="button"]');
+    if (googleBtn && googleBtn.textContent.includes('Google')) {
+        googleBtn.addEventListener('click', async function(e) {
+            e.preventDefault();
+            showLoadingState();
+            const result = await signInWithGoogle();
+            hideLoadingState();
+            
+            if (!result.success) {
+                alert('Error signing in with Google: ' + result.error);
+            }
+            // Auth state observer will handle redirect
+        });
+    }
 }
 
 // Auth Form Submission
-function handleAuthSubmit(formData) {
-    const email = formData.get('email') || document.querySelector('input[type="email"]')?.value;
-    const password = formData.get('password') || document.querySelector('input[type="password"]')?.value;
+async function handleAuthSubmit(formData) {
+    const email = document.querySelector('input[type="email"]')?.value;
+    const password = document.querySelector('input[type="password"]')?.value;
+    const fullName = document.querySelector('input[type="text"]')?.value;
     
-    console.log('Auth form submitted:', { email });
+    const isSignUp = document.querySelector('.auth-tabs .tab.active')?.textContent.trim() === 'Create Account';
     
-    // Simulate authentication
-    setTimeout(() => {
-        // Redirect to dashboard
-        window.location.href = 'Dashboard.html';
-    }, 500);
+    showLoadingState();
+    
+    let result;
+    if (isSignUp) {
+        result = await signUpUser(email, password, fullName);
+    } else {
+        result = await signInUser(email, password);
+    }
+    
+    hideLoadingState();
+    
+    if (!result.success) {
+        alert('Error: ' + result.error);
+    }
+    // Auth state observer will handle redirect
 }
 
 // Transaction Form Submission
-function handleTransactionSubmit(formData) {
-    console.log('Transaction form submitted');
+async function handleTransactionSubmit(formData) {
+    if (!currentUser) {
+        alert('Please sign in first');
+        return;
+    }
     
-    // Get all form inputs
-    const amount = document.querySelector('input[type="number"]')?.value;
-    const category = document.querySelector('select')?.value;
-    const date = document.querySelector('input[type="date"]')?.value;
-    const description = document.querySelector('input[type="text"]')?.value;
+    const amount = document.querySelector('.modal-dialog input[type="number"]')?.value;
+    const category = document.querySelector('.modal-dialog select')?.value;
+    const date = document.querySelector('.modal-dialog input[type="date"]')?.value;
+    const description = document.querySelector('.modal-dialog input[type="text"]')?.value;
+    const type = document.querySelector('.transaction-type-tabs .tab.active')?.textContent.trim().toLowerCase();
+    
+    if (!amount || !category || !date || !description) {
+        alert('Please fill in all required fields');
+        return;
+    }
     
     const transaction = {
         amount: amount,
         category: category,
         date: date,
         description: description,
-        type: document.querySelector('.transaction-type-tabs .tab.active')?.textContent.trim()
+        type: type
     };
     
-    console.log('New transaction:', transaction);
+    showLoadingState();
+    const result = await addTransaction(currentUser.uid, transaction);
+    hideLoadingState();
     
-    // Close modal and show success message
-    const modal = document.querySelector('.modal-overlay');
-    if (modal) {
-        modal.style.display = 'none';
-        document.body.style.overflow = 'auto';
+    if (result.success) {
+        // Close modal
+        const modal = document.querySelector('.modal-overlay:not(.signout-modal)');
+        if (modal) {
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Reload transactions
+        await loadUserData();
+        alert('Transaction added successfully!');
+    } else {
+        alert('Error adding transaction: ' + result.error);
     }
-    
-    // You would typically save this to a database here
-    alert('Transaction added successfully!');
-    
-    // Refresh the page to show new transaction
-    location.reload();
 }
 
 // Search Functionality
@@ -258,9 +446,9 @@ function initSearch() {
 }
 
 function filterTransactions(searchTerm) {
-    const transactions = document.querySelectorAll('.transaction-item');
+    const transactionItems = document.querySelectorAll('.transaction-item');
     
-    transactions.forEach(transaction => {
+    transactionItems.forEach(transaction => {
         const name = transaction.querySelector('.transaction-name')?.textContent.toLowerCase();
         const category = transaction.querySelector('.transaction-category')?.textContent.toLowerCase();
         
@@ -285,9 +473,9 @@ function initFilters() {
 }
 
 function filterByCategory(category) {
-    const transactions = document.querySelectorAll('.transaction-item');
+    const transactionItems = document.querySelectorAll('.transaction-item');
     
-    transactions.forEach(transaction => {
+    transactionItems.forEach(transaction => {
         const transactionCategory = transaction.querySelector('.transaction-category')?.textContent;
         
         if (category === 'All Categories' || transactionCategory === category) {
@@ -323,19 +511,12 @@ function initFileUpload() {
 
 // Export CSV
 function exportToCSV() {
-    const transactions = document.querySelectorAll('.transaction-item');
     let csv = 'Name,Category,Amount,Date\n';
     
     transactions.forEach(transaction => {
-        const name = transaction.querySelector('.transaction-name')?.textContent;
-        const category = transaction.querySelector('.transaction-category')?.textContent;
-        const amount = transaction.querySelector('.transaction-amount')?.textContent;
-        const date = transaction.querySelector('.transaction-date')?.textContent;
-        
-        csv += `${name},${category},${amount},${date}\n`;
+        csv += `${transaction.description},${transaction.category},${transaction.amount},${transaction.date}\n`;
     });
     
-    // Create download link
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -345,7 +526,6 @@ function exportToCSV() {
     window.URL.revokeObjectURL(url);
 }
 
-// Add export button listener
 const exportBtn = document.querySelector('.btn-primary.full-width');
 if (exportBtn && exportBtn.textContent.includes('Export')) {
     exportBtn.addEventListener('click', exportToCSV);
@@ -354,42 +534,19 @@ if (exportBtn && exportBtn.textContent.includes('Export')) {
 // Settings Form
 const settingsInputs = document.querySelectorAll('.settings-section input, .settings-section select');
 settingsInputs.forEach(input => {
-    input.addEventListener('change', function() {
-        console.log('Setting changed:', this.name, this.value);
-        // Save to localStorage or database
-    });
-});
-
-// Change Password
-const changePasswordBtn = document.querySelector('.btn-secondary');
-if (changePasswordBtn && changePasswordBtn.textContent.includes('Change Password')) {
-    changePasswordBtn.addEventListener('click', function() {
-        alert('Password change functionality would be implemented here');
-    });
-}
-
-// Delete Account
-const deleteAccountBtn = document.querySelector('.btn-danger');
-if (deleteAccountBtn && deleteAccountBtn.textContent.includes('Delete Account')) {
-    deleteAccountBtn.addEventListener('click', function() {
-        const confirmed = confirm('Are you sure you want to delete your account? This action cannot be undone.');
-        if (confirmed) {
-            console.log('Account deletion requested');
-            // Handle account deletion
+    input.addEventListener('change', async function() {
+        if (!currentUser) return;
+        
+        const updates = {};
+        if (this.name === 'name' || this.id === 'name') {
+            updates.name = this.value;
         }
-    });
-}
-
-// Smooth scroll for navigation
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function(e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-            target.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start'
-            });
+        
+        if (Object.keys(updates).length > 0) {
+            const result = await updateUserProfile(currentUser.uid, updates);
+            if (result.success) {
+                console.log('Profile updated');
+            }
         }
     });
 });
@@ -399,7 +556,6 @@ let resizeTimer;
 window.addEventListener('resize', function() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(function() {
-        // Hide mobile menu on resize to desktop
         if (window.innerWidth > 768) {
             mobileMenu.style.display = 'none';
             document.body.style.overflow = 'auto';
@@ -407,7 +563,333 @@ window.addEventListener('resize', function() {
     }, 250);
 });
 
-// Initialize file upload
-initFileUpload();
+// ==========================================
+// RENDER TRANSACTIONS
+// ==========================================
 
-console.log('Finance Tracker initialized successfully!');
+function renderTransactions() {
+    const transactionList = document.querySelector('.transaction-list');
+    if (!transactionList) return;
+    
+    if (transactions.length === 0) {
+        transactionList.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 40px;">No transactions yet. Add your first transaction!</p>';
+        return;
+    }
+    
+    transactionList.innerHTML = transactions.map(transaction => {
+        const date = new Date(transaction.date);
+        const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const amountClass = transaction.type === 'income' ? 'positive' : 'negative';
+        const amountPrefix = transaction.type === 'income' ? '+' : '-';
+        
+        return `
+            <div class="transaction-item">
+                <div class="transaction-icon">${transaction.type === 'income' ? '↗' : '🏷️'}</div>
+                <div class="transaction-details">
+                    <div class="transaction-name">${transaction.description}</div>
+                    <div class="transaction-category">${transaction.category}</div>
+                </div>
+                <div class="transaction-amount ${amountClass}">${amountPrefix}$${transaction.amount.toFixed(2)}</div>
+                <div class="transaction-date">${formattedDate}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ==========================================
+// CATEGORIES PAGE
+// ==========================================
+
+function renderCategories() {
+    const incomeContainer = document.getElementById('income-categories');
+    const expenseContainer = document.getElementById('expense-categories');
+    
+    if (!incomeContainer || !expenseContainer) return;
+    
+    const incomeCategories = categories.filter(c => c.type === 'income');
+    const expenseCategories = categories.filter(c => c.type === 'expense');
+    
+    const incomeCount = document.getElementById('income-count');
+    const expenseCount = document.getElementById('expense-count');
+    if (incomeCount) incomeCount.textContent = `(${incomeCategories.length})`;
+    if (expenseCount) expenseCount.textContent = `(${expenseCategories.length})`;
+    
+    if (incomeCategories.length === 0) {
+        incomeContainer.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+                <h3>No Income Categories</h3>
+                <p>Add your first income category to get started</p>
+            </div>
+        `;
+    } else {
+        incomeContainer.innerHTML = incomeCategories.map(category => `
+            <div class="category-item">
+                <div class="category-info">
+                    <div class="category-color" style="background: ${category.color};"></div>
+                    <span class="category-name">${category.name}</span>
+                    <span class="category-badge income">Income</span>
+                </div>
+                <div class="category-actions">
+                    <button class="icon-btn" onclick="window.editCategoryHandler('${category.id}')" title="Edit">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                    <button class="icon-btn delete" onclick="window.openDeleteModalHandler('${category.id}')" title="Delete">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    if (expenseCategories.length === 0) {
+        expenseContainer.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                </svg>
+                <h3>No Expense Categories</h3>
+                <p>Add your first expense category to get started</p>
+            </div>
+        `;
+    } else {
+        expenseContainer.innerHTML = expenseCategories.map(category => `
+            <div class="category-item">
+                <div class="category-info">
+                    <div class="category-color" style="background: ${category.color};"></div>
+                    <span class="category-name">${category.name}</span>
+                    <span class="category-badge expense">Expense</span>
+                </div>
+                <div class="category-actions">
+                    <button class="icon-btn" onclick="window.editCategoryHandler('${category.id}')" title="Edit">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        </svg>
+                    </button>
+                    <button class="icon-btn delete" onclick="window.openDeleteModalHandler('${category.id}')" title="Delete">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+// Global handlers for categories
+window.openAddCategoryModal = function(type = 'expense') {
+    const modal = document.getElementById('category-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const form = document.getElementById('category-form');
+    const typeSelect = document.getElementById('category-type');
+    
+    if (!modal || !form) return;
+    
+    currentEditId = null;
+    form.reset();
+    modalTitle.textContent = 'Add Category';
+    typeSelect.value = type;
+    modal.style.display = 'flex';
+};
+
+window.closeCategoryModal = function() {
+    const modal = document.getElementById('category-modal');
+    if (modal) modal.style.display = 'none';
+    currentEditId = null;
+};
+
+window.editCategoryHandler = function(id) {
+    const category = categories.find(c => c.id === id);
+    if (!category) return;
+    
+    const modal = document.getElementById('category-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const nameInput = document.getElementById('category-name');
+    const typeSelect = document.getElementById('category-type');
+    
+    if (!modal) return;
+    
+    currentEditId = id;
+    modalTitle.textContent = 'Edit Category';
+    nameInput.value = category.name;
+    typeSelect.value = category.type;
+    
+    const colorInputs = document.querySelectorAll('input[name="color"]');
+    colorInputs.forEach(input => {
+        if (input.value === category.color) {
+            input.checked = true;
+        }
+    });
+    
+    modal.style.display = 'flex';
+};
+
+window.openDeleteModalHandler = function(id) {
+    categoryToDelete = id;
+    const modal = document.getElementById('delete-modal');
+    if (modal) modal.style.display = 'flex';
+};
+
+window.closeDeleteModal = function() {
+    const modal = document.getElementById('delete-modal');
+    if (modal) modal.style.display = 'none';
+    categoryToDelete = null;
+};
+
+window.confirmDeleteCategory = async function() {
+    if (categoryToDelete === null || !currentUser) return;
+    
+    showLoadingState();
+    const result = await deleteCategory(currentUser.uid, categoryToDelete);
+    hideLoadingState();
+    
+    if (result.success) {
+        await loadUserData();
+        window.closeDeleteModal();
+    } else {
+        alert('Error deleting category: ' + result.error);
+    }
+};
+
+function initCategoryForm() {
+    const form = document.getElementById('category-form');
+    if (!form) return;
+    
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        if (!currentUser) {
+            alert('Please sign in first');
+            return;
+        }
+        
+        const name = document.getElementById('category-name').value.trim();
+        const type = document.getElementById('category-type').value;
+        const colorInput = document.querySelector('input[name="color"]:checked');
+        const color = colorInput ? colorInput.value : '#10b981';
+        
+        if (!name) {
+            alert('Please enter a category name');
+            return;
+        }
+        
+        showLoadingState();
+        
+        if (currentEditId) {
+            const result = await updateCategory(currentUser.uid, currentEditId, { name, type, color });
+            hideLoadingState();
+            
+            if (result.success) {
+                await loadUserData();
+                window.closeCategoryModal();
+            } else {
+                alert('Error updating category: ' + result.error);
+            }
+        } else {
+            const result = await addCategory(currentUser.uid, { name, type, color });
+            hideLoadingState();
+            
+            if (result.success) {
+                await loadUserData();
+                window.closeCategoryModal();
+            } else {
+                alert('Error adding category: ' + result.error);
+            }
+        }
+    });
+}
+
+function loadCategoriesIntoDropdowns() {
+    const categorySelects = document.querySelectorAll('.filter-section select, .modal-dialog select');
+    
+    if (categorySelects.length === 0) return;
+    
+    categorySelects.forEach(select => {
+        const isFilterDropdown = select.closest('.filter-section');
+        
+        if (isFilterDropdown) {
+            const currentValue = select.value;
+            select.innerHTML = '<option>All Categories</option>' + 
+                categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+            select.value = currentValue || 'All Categories';
+        } else {
+            const currentValue = select.value;
+            select.innerHTML = categories.map(c => 
+                `<option value="${c.name}">${c.name}</option>`
+            ).join('');
+            if (currentValue && categories.find(c => c.name === currentValue)) {
+                select.value = currentValue;
+            }
+        }
+    });
+}
+
+function initCategoriesPage() {
+    if (!document.getElementById('income-categories')) return;
+    
+    initCategoryForm();
+    
+    const modal = document.getElementById('category-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                window.closeCategoryModal();
+            }
+        });
+    }
+    
+    const deleteModal = document.getElementById('delete-modal');
+    if (deleteModal) {
+        deleteModal.addEventListener('click', (e) => {
+            if (e.target === deleteModal) {
+                window.closeDeleteModal();
+            }
+        });
+    }
+}
+
+function initProfileDropdown() {
+    const profileBtn = document.querySelector('.profile-btn');
+    const profileContainer = document.querySelector('.profile-container .profile-dropdown');
+    
+    if (profileBtn && profileContainer) {
+        profileBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            profileContainer.classList.toggle('active');
+        });
+        
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.profile-container')) {
+                profileContainer.classList.remove('active');
+            }
+        });
+        
+        const profileSignoutBtn = document.querySelector('.profile-signout-btn');
+        if (profileSignoutBtn) {
+            profileSignoutBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const signoutModal = document.querySelector('.signout-modal');
+                if (signoutModal) {
+                    signoutModal.style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                    profileContainer.classList.remove('active');
+                }
+            });
+        }
+    }
+}
+
+console.log('Finance Tracker with Firebase initialized!');

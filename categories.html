@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/charts.css/dist/charts.min.css">
-    <link rel="stylesheet" href="index.css">
+    <title>Categories</title>
+    <link rel="stylesheet" href="index.css"/>
 </head>
 <body>
     <!-- TOP NAVIGATION BAR - Add this right after <body> tag and before .app-container -->
 <div class="top-nav">
-    <div class="top-nav-title" id="pageTitle">Analytics</div>
+    <div class="top-nav-title" id="pageTitle">Categories</div>
     <div class="top-nav-user">
         <div class="user-info">
             <div class="user-name" id="topNavUserName">John Doe</div>
@@ -58,8 +57,7 @@
         </svg>
     </button>
 </header>
-
-<!-- Profile Dropdown -->
+<!-- Profile Dropdown  -->
 <div class="profile-dropdown">
     <a href="#signout" class="dropdown-signout">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -70,16 +68,15 @@
         Sign Out
     </a>
 </div>
-
-    <!-- Analytics Page -->
+    <!-- Categories Page -->
     <div class="app-container">
         <aside class="sidebar">
             <div class="logo">Finance</div>
             <p class="subtitle">Personal Tracker</p>
             
             <nav>
-                <a href="Dashboard.html" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <a href="dashboard.html" class="nav-item">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7"></rect>
                         <rect x="14" y="3" width="7" height="7"></rect>
                         <rect x="14" y="14" width="7" height="7"></rect>
@@ -88,20 +85,20 @@
                     Dashboard
                 </a>
                 <a href="transactions.html" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M7 17L17 7M17 7H7M17 7V17"></path>
                     </svg>
                     Transactions
                 </a>
-                <a href="categories.html" class="nav-item">
+                <a href="categories.html" class="nav-item active">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
                         <line x1="7" y1="7" x2="7.01" y2="7"></line>
                     </svg>
                     Categories
                 </a>
-                <a href="analytics.html" class="nav-item active">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <a href="analytics.html" class="nav-item">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 3v18h18"></path>
                         <path d="M18 17V9"></path>
                         <path d="M13 17V5"></path>
@@ -110,7 +107,7 @@
                     Analytics
                 </a>
                 <a href="settings.html" class="nav-item">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.2-4.2l4.2-4.2"></path>
                     </svg>
@@ -118,90 +115,144 @@
                 </a>
             </nav>
             
-            <a href="#signout" class="nav-item sign-out">Sign Out</a>
+            <a href="#signout" class="nav-item sign-out">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                Sign Out
+            </a>
         </aside>
         
         <main class="main-content">
             <header class="page-header">
-                <h1>Analytics</h1>
-                <p>Visualize your spending patterns and financial insights</p>
+                <h1>Categories</h1>
+                <p>Manage your transaction categories</p>
             </header>
             
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span>Top Category</span>
-                        <div class="stat-icon">↘</div>
+            <div class="categories-container">
+                <!-- Income Categories Section -->
+                <div class="category-section">
+                    <div class="section-header">
+                        <h2 class="section-title income-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                            </svg>
+                            Income Categories <span class="category-count" id="income-count">(2)</span>
+                        </h2>
+                        <button class="btn-primary btn-sm" onclick="openAddCategoryModal('income')">
+                            + Add Category
+                        </button>
                     </div>
-                    <div class="stat-value">$450.00</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span>Total Income (YTD)</span>
-                        <div class="stat-icon">↗</div>
-                    </div>
-                    <div class="stat-value">$20,940.00</div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <span>Total Expense (YTD)</span>
-                        <div class="stat-icon">↘</div>
-                    </div>
-                    <div class="stat-value">$10,606.00</div>
-                </div>
-            </div>
-            
-            <div class="charts-grid">
-                <div class="chart-card">
-                    <h2>Income vs Expense</h2>
-                    <div class="chart-placeholder">
-                        [Chart: Bar chart showing income vs expense from Jan to Jun]
+                    
+                    <div class="category-list" id="income-categories">
+                        <!-- Income categories will be dynamically loaded here -->
                     </div>
                 </div>
                 
-                <div class="chart-card">
-                    <h2>Spending by Category</h2>
-                    <div class="chart-placeholder">
-                        [Chart: Pie chart:]
+                <!-- Expense Categories Section -->
+                <div class="category-section">
+                    <div class="section-header">
+                        <h2 class="section-title expense-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                            </svg>
+                            Expense Categories <span class="category-count" id="expense-count">(4)</span>
+                        </h2>
+                        <button class="btn-primary btn-sm" onclick="openAddCategoryModal('expense')">
+                            + Add Category
+                        </button>
                     </div>
-                </div>
-            </div>
-            
-            <div class="summary-section">
-                <h2>Summary</h2>
-                <div class="summary-grid">
-                    <div class="summary-item">
-                        <div class="summary-label">Savings Rate</div>
-                        <div class="summary-value">52%</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Average Monthly Expense</div>
-                        <div class="summary-value">$1,767.67</div>
-                    </div>
-                    <div class="summary-item">
-                        <div class="summary-label">Average Monthly Income</div>
-                        <div class="summary-value">$3,490.00</div>
+                    
+                    <div class="category-list" id="expense-categories">
+                        <!-- Expense categories will be dynamically loaded here -->
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Sign Out Confirmation Modal -->
-<div class="modal-overlay signout-modal">
-    <div class="modal-dialog small">
-        <h2>Sign Out?</h2>
-        <p>Are you sure you want to sign out? You'll need to sign in again to access your account.</p>
-        
-        <div class="modal-actions">
-            <button class="btn-secondary">Cancel</button>
-            <button class="btn-danger">Sign Out</button>
+    <!-- Add/Edit Category Modal -->
+    <div class="modal-overlay" id="category-modal">
+        <div class="modal-dialog small">
+            <div class="modal-header">
+                <h2 id="modal-title">Add Category</h2>
+                <button class="close-btn" onclick="closeCategoryModal()">×</button>
+            </div>
+            
+            <form id="category-form">
+                <div class="form-group">
+                    <label>Category Name *</label>
+                    <input type="text" id="category-name" placeholder="e.g., Groceries, Rent..." required>
+                </div>
+                
+                <div class="form-group">
+                    <label>Type *</label>
+                    <select id="category-type" required>
+                        <option value="income">Income</option>
+                        <option value="expense">Expense</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Color</label>
+                    <div class="color-picker">
+                        <input type="radio" name="color" value="#10b981" id="color-1" checked>
+                        <label for="color-1" class="color-option" style="background: #10b981;"></label>
+                        
+                        <input type="radio" name="color" value="#3b82f6" id="color-2">
+                        <label for="color-2" class="color-option" style="background: #3b82f6;"></label>
+                        
+                        <input type="radio" name="color" value="#ef4444" id="color-3">
+                        <label for="color-3" class="color-option" style="background: #ef4444;"></label>
+                        
+                        <input type="radio" name="color" value="#f59e0b" id="color-4">
+                        <label for="color-4" class="color-option" style="background: #f59e0b;"></label>
+                        
+                        <input type="radio" name="color" value="#8b5cf6" id="color-5">
+                        <label for="color-5" class="color-option" style="background: #8b5cf6;"></label>
+                        
+                        <input type="radio" name="color" value="#ec4899" id="color-6">
+                        <label for="color-6" class="color-option" style="background: #ec4899;"></label>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeCategoryModal()">Cancel</button>
+                    <button type="submit" class="btn-primary">Save Category</button>
+                </div>
+            </form>
         </div>
     </div>
-</div>
-   
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="delete-modal">
+        <div class="modal-dialog small">
+            <h2>Delete Category?</h2>
+            <p>Are you sure you want to delete this category? This action cannot be undone.</p>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+                <button class="btn-danger" onclick="confirmDeleteCategory()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign Out Confirmation Modal -->
+    <div class="modal-overlay" id="signout-overlay">
+        <div class="modal-dialog small">
+            <h2>Sign Out?</h2>
+            <p>Are you sure you want to sign out? You'll need to sign in again to access your account.</p>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" id="cancel-signout">Cancel</button>
+                <button class="btn-danger" id="confirm-signout">Sign Out</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Mobile Menu -->
     <div class="mobile-menu">
@@ -226,14 +277,14 @@
                     </svg>
                     Transactions
                 </a>
-                <a href="categories.html" class="nav-item">
+            <a href="categories.html" class="nav-item active">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
                         <line x1="7" y1="7" x2="7.01" y2="7"></line>
                     </svg>
                     Categories
                 </a>
-            <a href="analytics.html" class="nav-item active">
+            <a href="analytics.html" class="nav-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path d="M3 3v18h18"></path>
                         <path d="M18 17V9"></path>
@@ -253,7 +304,7 @@
         
         <a href="#signout" class="nav-item sign-out">Sign Out</a>
     </div>
-   <script type="module" src="firebase-config.js"></script>
-   <script type="module" src="index.js"></script>
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="index.js"></script>
 </body>
 </html>
