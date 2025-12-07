@@ -47,13 +47,13 @@ export const db = getFirestore(app);
 // AUTHENTICATION FUNCTIONS
 // ==========================================
 
-// Sign Up with Email/Password
+// Sign Up with Email/Password - FIXED
 export async function signUpUser(email, password, fullName) {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         
-        // Create user profile in Firestore
+        // FIXED: Use setDoc with user.uid instead of addDoc
         await setDoc(doc(db, 'users', user.uid), {
             name: fullName || email.split('@')[0],
             email: email,
@@ -117,7 +117,7 @@ export async function signOutUser() {
     }
 }
 
-// Get Current User Profile
+// Get Current User Profile - UNCOMMENTED
 export async function getUserProfile(userId) {
     try {
         const docRef = doc(db, 'users', userId);
@@ -134,7 +134,7 @@ export async function getUserProfile(userId) {
     }
 }
 
-// Update User Profile
+// Update User Profile - UNCOMMENTED
 export async function updateUserProfile(userId, updates) {
     try {
         const docRef = doc(db, 'users', userId);
@@ -147,7 +147,7 @@ export async function updateUserProfile(userId, updates) {
 }
 
 // ==========================================
-// CATEGORY FUNCTIONS
+// CATEGORY FUNCTIONS - UNCOMMENTED
 // ==========================================
 
 // Get all categories for a user
@@ -211,7 +211,7 @@ export async function deleteCategory(userId, categoryId) {
 }
 
 // ==========================================
-// TRANSACTION FUNCTIONS
+// TRANSACTION FUNCTIONS - UNCOMMENTED
 // ==========================================
 
 // Get all transactions for a user
@@ -347,7 +347,7 @@ export async function getTransactionsByDateRange(userId, startDate, endDate) {
 }
 
 // ==========================================
-// INITIALIZE DEFAULT CATEGORIES
+// INITIALIZE DEFAULT CATEGORIES - UNCOMMENTED
 // ==========================================
 
 export async function initializeDefaultCategories(userId) {
@@ -371,4 +371,3 @@ export async function initializeDefaultCategories(userId) {
     }
 }
 
-console.log('Firebase configured successfully!');
