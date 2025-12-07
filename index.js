@@ -1,4 +1,4 @@
-// Finance Tracker JavaScript with Firebase Integration
+// Finance Tracker JavaScript with Firebase Integration - COMPLETE FIX
 
 import { 
     auth,
@@ -27,16 +27,7 @@ let categories = [];
 let transactions = [];
 let currentEditId = null;
 let categoryToDelete = null;
-
-// DOM Elements
-const authTabs = document.querySelectorAll('.auth-tabs .tab');
-const transactionTypeTabs = document.querySelectorAll('.transaction-type-tabs .tab');
-const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
-const mobileMenu = document.querySelector('.mobile-menu');
-const mobileMenuClose = document.querySelector('.mobile-menu .close-btn');
-const modalOverlays = document.querySelectorAll('.modal-overlay');
-const addTransactionBtns = document.querySelectorAll('.btn-primary');
-const signOutBtns = document.querySelectorAll('.sign-out');
+let currentTransactionType = 'expense';
 
 // ==========================================
 // AUTH STATE OBSERVER
@@ -44,23 +35,20 @@ const signOutBtns = document.querySelectorAll('.sign-out');
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
-        // User is signed in
         currentUser = user;
         console.log('User signed in:', user.email);
         
-        // Load user data
-        await loadUserData();
-        
-        // If on auth page, redirect to dashboard
         if (document.querySelector('.landing-page')) {
             window.location.href = 'Dashboard.html';
+        } else {
+            showPageLoadingState();
+            await loadUserData();
+            hidePageLoadingState();
         }
     } else {
-        // User is signed out
         currentUser = null;
         console.log('User signed out');
         
-        // If not on auth page, redirect to login
         if (!document.querySelector('.landing-page')) {
             window.location.href = 'index.html';
         }
@@ -75,18 +63,15 @@ async function loadUserData() {
     if (!currentUser) return;
     
     try {
-        // Load user profile
         const profileResult = await getUserProfile(currentUser.uid);
         if (profileResult.success) {
             updateUIWithUserProfile(profileResult.data);
         }
         
-        // Load categories
         const categoriesResult = await getCategories(currentUser.uid);
         if (categoriesResult.success) {
             categories = categoriesResult.data;
             
-            // If no categories, initialize defaults
             if (categories.length === 0) {
                 await initializeDefaultCategories(currentUser.uid);
                 const newCategoriesResult = await getCategories(currentUser.uid);
@@ -97,14 +82,15 @@ async function loadUserData() {
             loadCategoriesIntoDropdowns();
         }
         
-        // Load transactions
         const transactionsResult = await getTransactions(currentUser.uid);
         if (transactionsResult.success) {
             transactions = transactionsResult.data;
             renderTransactions();
+            updateDashboardStats();
         }
     } catch (error) {
         console.error('Error loading user data:', error);
+        alert('Error loading data. Please refresh the page.');
     }
 }
 
@@ -113,28 +99,68 @@ async function loadUserData() {
 // ==========================================
 
 function updateUIWithUserProfile(profile) {
-    // Update all user name elements
     const userNameElements = document.querySelectorAll('#topNavUserName, #dropdownUserName');
     userNameElements.forEach(el => {
-        if (el) el.textContent = profile.name;
+        if (el) el.textContent = profile.name || 'User';
     });
     
-    // Update all user email elements
     const userEmailElements = document.querySelectorAll('#topNavUserEmail, #dropdownUserEmail');
     userEmailElements.forEach(el => {
-        if (el) el.textContent = profile.email;
+        if (el) el.textContent = profile.email || '';
     });
     
-    // Update settings page if present
-    const nameInput = document.querySelector('.settings-section input[type="text"]');
-    if (nameInput) nameInput.value = profile.name;
+    const nameInput = document.getElementById('name');
+    if (nameInput) nameInput.value = profile.name || '';
     
-    const emailInput = document.querySelector('.settings-section input[type="email"]');
-    if (emailInput) emailInput.value = profile.email;
+    const emailInput = document.getElementById('email');
+    if (emailInput) emailInput.value = profile.email || '';
+    
+    const currencySelect = document.getElementById('currency');
+    if (currencySelect && profile.currency) {
+        currencySelect.value = profile.currency;
+    }
+}
+
+function updateDashboardStats() {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    let totalBalance = 0;
+    let monthlyIncome = 0;
+    let monthlyExpense = 0;
+    
+    transactions.forEach(transaction => {
+        const transactionDate = new Date(transaction.date);
+        const amount = parseFloat(transaction.amount);
+        
+        if (transaction.type === 'income') {
+            totalBalance += amount;
+            if (transactionDate.getMonth() === currentMonth && 
+                transactionDate.getFullYear() === currentYear) {
+                monthlyIncome += amount;
+            }
+        } else {
+            totalBalance -= amount;
+            if (transactionDate.getMonth() === currentMonth && 
+                transactionDate.getFullYear() === currentYear) {
+                monthlyExpense += amount;
+            }
+        }
+    });
+    
+    const statValues = document.querySelectorAll('.stat-value');
+    if (statValues.length >= 3) {
+        statValues[0].textContent = `$${totalBalance.toFixed(2)}`;
+        statValues[1].textContent = `$${monthlyIncome.toFixed(2)}`;
+        statValues[2].textContent = `$${monthlyExpense.toFixed(2)}`;
+    }
 }
 
 function showLoadingState() {
-    // Add a loading overlay
+    const existing = document.getElementById('loading-overlay');
+    if (existing) return;
+    
     const loadingDiv = document.createElement('div');
     loadingDiv.id = 'loading-overlay';
     loadingDiv.style.cssText = `
@@ -143,13 +169,24 @@ function showLoadingState() {
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.95);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 9999;
     `;
-    loadingDiv.innerHTML = '<p style="font-size: 18px; color: #10b981;">Loading...</p>';
+    loadingDiv.innerHTML = `
+        <div style="text-align: center;">
+            <div style="width: 40px; height: 40px; margin: 0 auto 12px; border: 3px solid #e5e7eb; border-top: 3px solid #10b981; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+            <p style="font-size: 16px; color: #10b981; font-weight: 500;">Processing...</p>
+        </div>
+        <style>
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    `;
     document.body.appendChild(loadingDiv);
 }
 
@@ -158,69 +195,350 @@ function hideLoadingState() {
     if (loadingDiv) loadingDiv.remove();
 }
 
-// Initialize app
+function showPageLoadingState() {
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.visibility = 'hidden';
+        mainContent.style.opacity = '0';
+    }
+    
+    const existing = document.getElementById('page-loading-overlay');
+    if (existing) return;
+    
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'page-loading-overlay';
+    loadingDiv.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #f9fafb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    `;
+    loadingDiv.innerHTML = `
+        <div style="text-align: center;">
+            <div style="width: 60px; height: 60px; margin: 0 auto 20px; border: 4px solid #e5e7eb; border-top: 4px solid #10b981; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <p style="font-size: 18px; color: #10b981; font-weight: 500;">Loading your data...</p>
+        </div>
+    `;
+    document.body.appendChild(loadingDiv);
+}
+
+function hidePageLoadingState() {
+    const loadingDiv = document.getElementById('page-loading-overlay');
+    if (loadingDiv) {
+        loadingDiv.style.transition = 'opacity 0.3s ease';
+        loadingDiv.style.opacity = '0';
+        setTimeout(() => loadingDiv.remove(), 300);
+    }
+    
+    const mainContent = document.querySelector('.main-content');
+    if (mainContent) {
+        mainContent.style.transition = 'opacity 0.3s ease';
+        mainContent.style.visibility = 'visible';
+        mainContent.style.opacity = '1';
+    }
+}
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded - Initializing...');
+    
+    if (!document.querySelector('.landing-page')) {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            mainContent.style.visibility = 'hidden';
+            mainContent.style.opacity = '0';
+        }
+    }
+    
     initAuthTabs();
-    initTransactionTabs();
     initMobileMenu();
     initModals();
-    initForms();
+    initAuthForms();
     initSearch();
     initFilters();
     initProfileDropdown();
     initCategoriesPage();
     initFileUpload();
+    initSettingsPage();
+    
+    // Initialize transaction modal LAST to ensure everything is ready
+    setTimeout(() => {
+        initTransactionModal();
+        console.log('Transaction modal initialized');
+    }, 500);
 });
 
-// Auth Tabs Functionality
+// ==========================================
+// TRANSACTION MODAL - COMPLETE REWRITE
+// ==========================================
+
+function initTransactionModal() {
+    console.log('Initializing transaction modal...');
+    
+    // Find and attach to all "Add Transaction" buttons
+    const addBtns = document.querySelectorAll('.btn-primary');
+    addBtns.forEach(btn => {
+        if (btn.textContent.includes('Add Transaction')) {
+            // Remove any existing listeners
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            newBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log('Add Transaction button clicked');
+                openTransactionModal();
+            });
+        }
+    });
+    
+    // Initialize transaction type tabs
+    const modal = document.getElementById('transaction-modal');
+    if (modal) {
+        const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function(e) {
+                e.preventDefault();
+                tabs.forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                currentTransactionType = this.textContent.trim().toLowerCase();
+                console.log('Transaction type changed to:', currentTransactionType);
+            });
+        });
+        
+        // Handle form submission - CRITICAL FIX
+        const form = modal.querySelector('form');
+        if (form) {
+            // Remove default form submission
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                console.log('Form submit event triggered');
+                handleTransactionSubmit();
+            });
+            
+            // Also handle the submit button directly
+            const submitBtn = form.querySelector('button[type="submit"], .btn-primary:not(.btn-secondary)');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    console.log('Submit button clicked directly');
+                    handleTransactionSubmit();
+                });
+            }
+        }
+        
+        // Close button handlers
+        const closeBtns = modal.querySelectorAll('.close-btn, .btn-secondary');
+        closeBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                closeTransactionModal();
+            });
+        });
+        
+        // Click outside to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeTransactionModal();
+            }
+        });
+    }
+}
+
+function openTransactionModal() {
+    console.log('Opening transaction modal...');
+    const modal = document.getElementById('transaction-modal');
+    
+    if (!modal) {
+        console.error('Transaction modal not found!');
+        return;
+    }
+    
+    // Reset form
+    const form = modal.querySelector('form');
+    if (form) form.reset();
+    
+    // Set today's date
+    const dateInput = modal.querySelector('input[type="date"]');
+    if (dateInput) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
+    // Reset to expense
+    currentTransactionType = 'expense';
+    const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
+    tabs.forEach(tab => {
+        if (tab.textContent.trim().toLowerCase() === 'expense') {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+    
+    // Show modal
+    modal.classList.add('show');
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    console.log('Modal opened successfully');
+}
+
+function closeTransactionModal() {
+    const modal = document.getElementById('transaction-modal');
+    if (modal) {
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+}
+
+async function handleTransactionSubmit() {
+    console.log('=== HANDLING TRANSACTION SUBMISSION ===');
+    
+    if (!currentUser) {
+        console.error('No user logged in');
+        alert('Please sign in first');
+        return;
+    }
+    
+    const modal = document.getElementById('transaction-modal');
+    if (!modal) {
+        console.error('Modal not found');
+        return;
+    }
+    
+    const form = modal.querySelector('form');
+    if (!form) {
+        console.error('Form not found');
+        return;
+    }
+    
+    // Get form values
+    const amountInput = form.querySelector('input[type="number"]');
+    const categorySelect = form.querySelector('select');
+    const dateInput = form.querySelector('input[type="date"]');
+    const descriptionInput = form.querySelector('input[type="text"]');
+    
+    console.log('Form elements:', {
+        amount: !!amountInput,
+        category: !!categorySelect,
+        date: !!dateInput,
+        description: !!descriptionInput
+    });
+    
+    const amount = amountInput?.value;
+    const category = categorySelect?.value;
+    const date = dateInput?.value;
+    const description = descriptionInput?.value?.trim();
+    
+    console.log('Form values:', { amount, category, date, description, type: currentTransactionType });
+    
+    // Validation
+    if (!amount || !category || !date || !description) {
+        console.error('Missing fields');
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    const numAmount = parseFloat(amount);
+    if (numAmount <= 0 || isNaN(numAmount)) {
+        console.error('Invalid amount');
+        alert('Amount must be greater than 0');
+        return;
+    }
+    
+    // Create transaction object
+    const transaction = {
+        amount: numAmount,
+        category: category,
+        date: date,
+        description: description,
+        type: currentTransactionType
+    };
+    
+    console.log('Submitting transaction:', transaction);
+    
+    // Submit to Firebase
+    showLoadingState();
+    
+    try {
+        const result = await addTransaction(currentUser.uid, transaction);
+        console.log('Firebase result:', result);
+        
+        if (result.success) {
+            console.log('✅ Transaction added successfully!');
+            
+            // Close modal
+            closeTransactionModal();
+            
+            // Reset form
+            form.reset();
+            
+            // Reload data
+            console.log('Reloading user data...');
+            await loadUserData();
+            
+            hideLoadingState();
+            alert('Transaction added successfully!');
+            
+            console.log('Transaction count after reload:', transactions.length);
+        } else {
+            throw new Error(result.error);
+        }
+    } catch (error) {
+        console.error('Error adding transaction:', error);
+        hideLoadingState();
+        alert('Error adding transaction: ' + error.message);
+    }
+}
+
+// ==========================================
+// TAB FUNCTIONALITY
+// ==========================================
+
 function initAuthTabs() {
+    const authTabs = document.querySelectorAll('.auth-tabs .tab');
     authTabs.forEach(tab => {
         tab.addEventListener('click', function() {
             authTabs.forEach(t => t.classList.remove('active'));
             this.classList.add('active');
-            
-            const isSignIn = this.textContent.trim() === 'Sign In';
-            if (isSignIn) {
-                console.log('Switching to Sign In form');
-            } else {
-                console.log('Switching to Create Account form');
-            }
         });
     });
 }
 
-// Transaction Type Tabs
-function initTransactionTabs() {
-    transactionTypeTabs.forEach(tab => {
-        tab.addEventListener('click', function() {
-            transactionTypeTabs.forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-            
-            const type = this.textContent.trim();
-            console.log('Transaction type selected:', type);
-        });
-    });
-}
+// ==========================================
+// MOBILE MENU
+// ==========================================
 
-// Mobile Menu
 function initMobileMenu() {
-    if (mobileMenuToggle) {
-        mobileMenuToggle.addEventListener('click', function() {
+    const mobileMenuToggle = document.querySelector('.mobile-menu-toggle');
+    const mobileMenu = document.querySelector('.mobile-menu');
+    const mobileMenuClose = mobileMenu?.querySelector('.close-btn');
+    
+    if (mobileMenuToggle && mobileMenu) {
+        mobileMenuToggle.addEventListener('click', () => {
             mobileMenu.style.display = 'flex';
             document.body.style.overflow = 'hidden';
         });
     }
     
     if (mobileMenuClose) {
-        mobileMenuClose.addEventListener('click', function() {
+        mobileMenuClose.addEventListener('click', () => {
             mobileMenu.style.display = 'none';
             document.body.style.overflow = 'auto';
         });
     }
     
-    const mobileNavItems = mobileMenu?.querySelectorAll('.nav-item');
+    const mobileNavItems = mobileMenu?.querySelectorAll('.nav-item:not(.sign-out)');
     mobileNavItems?.forEach(item => {
-        item.addEventListener('click', function() {
+        item.addEventListener('click', () => {
             mobileMenu.style.display = 'none';
             document.body.style.overflow = 'auto';
         });
@@ -230,83 +548,65 @@ function initMobileMenu() {
     const profileDropdown = document.querySelector('.profile-dropdown');
 
     if (mobileUserIcon && profileDropdown) {
-        mobileUserIcon.addEventListener('click', function(e) {
+        mobileUserIcon.addEventListener('click', (e) => {
             e.stopPropagation();
             profileDropdown.classList.toggle('show');
         });
         
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.mobile-user-icon') && !e.target.closest('.profile-dropdown')) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.mobile-user-icon') && 
+                !e.target.closest('.profile-dropdown')) {
                 profileDropdown.classList.remove('show');
             }
         });
-        
-        const dropdownSignOut = profileDropdown.querySelector('.dropdown-signout');
-        if (dropdownSignOut) {
-            dropdownSignOut.addEventListener('click', function(e) {
-                e.preventDefault();
-                const signoutModal = document.querySelector('.signout-modal');
-                if (signoutModal) {
-                    signoutModal.style.display = 'flex';
-                    document.body.style.overflow = 'hidden';
-                    profileDropdown.classList.remove('show');
-                }
-            });
-        }
     }
 }
 
-// Modal Management
+// ==========================================
+// MODAL MANAGEMENT
+// ==========================================
+
 function initModals() {
-    addTransactionBtns.forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            if (this.textContent.includes('Add Transaction')) {
-                e.preventDefault();
-                const modal = document.querySelector('.modal-overlay:not(.signout-modal)');
-                if (modal) {
-                    modal.style.display = 'flex';
-                    document.body.style.overflow = 'hidden';
-                }
-            }
-        });
-    });
-    
+    const signOutBtns = document.querySelectorAll('.sign-out, .nav-item.sign-out');
     signOutBtns.forEach(btn => {
-        btn.addEventListener('click', function(e) {
+        btn.addEventListener('click', (e) => {
             e.preventDefault();
             const signoutModal = document.querySelector('.signout-modal');
             if (signoutModal) {
+                signoutModal.classList.add('show');
                 signoutModal.style.display = 'flex';
                 document.body.style.overflow = 'hidden';
             }
         });
     });
     
-    const closeBtns = document.querySelectorAll('.close-btn, .btn-secondary');
+    const closeBtns = document.querySelectorAll('.signout-modal .close-btn, .signout-modal .btn-secondary');
     closeBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
-            const modal = this.closest('.modal-overlay');
+            e.preventDefault();
+            const modal = document.querySelector('.signout-modal');
             if (modal) {
-                e.preventDefault();
+                modal.classList.remove('show');
                 modal.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
         });
     });
     
+    const modalOverlays = document.querySelectorAll('.modal-overlay');
     modalOverlays.forEach(overlay => {
-        overlay.addEventListener('click', function(e) {
-            if (e.target === this) {
-                this.style.display = 'none';
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay && overlay.classList.contains('signout-modal')) {
+                overlay.classList.remove('show');
+                overlay.style.display = 'none';
                 document.body.style.overflow = 'auto';
             }
         });
     });
     
-    // Confirm sign out
-    const confirmSignOut = document.querySelector('.signout-modal .btn-danger');
-    if (confirmSignOut) {
-        confirmSignOut.addEventListener('click', async function() {
+    const confirmSignOutBtn = document.querySelector('.signout-modal .btn-danger');
+    if (confirmSignOutBtn) {
+        confirmSignOutBtn.addEventListener('click', async () => {
             showLoadingState();
             const result = await signOutUser();
             hideLoadingState();
@@ -320,29 +620,24 @@ function initModals() {
     }
 }
 
-// Form Handling
-function initForms() {
+// ==========================================
+// AUTH FORM HANDLING
+// ==========================================
+
+function initAuthForms() {
     const forms = document.querySelectorAll('form');
-    
     forms.forEach(form => {
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const formType = this.closest('.landing-page') ? 'auth' : 'transaction';
-            
-            if (formType === 'auth') {
-                handleAuthSubmit(formData);
-            } else {
-                handleTransactionSubmit(formData);
-            }
-        });
+        if (form.closest('.landing-page')) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await handleAuthSubmit(form);
+            });
+        }
     });
     
-    // Google Sign In Button
     const googleBtn = document.querySelector('button[type="button"]');
     if (googleBtn && googleBtn.textContent.includes('Google')) {
-        googleBtn.addEventListener('click', async function(e) {
+        googleBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             showLoadingState();
             const result = await signInWithGoogle();
@@ -351,25 +646,47 @@ function initForms() {
             if (!result.success) {
                 alert('Error signing in with Google: ' + result.error);
             }
-            // Auth state observer will handle redirect
         });
     }
 }
 
-// Auth Form Submission
-async function handleAuthSubmit(formData) {
-    const email = document.querySelector('input[type="email"]')?.value;
-    const password = document.querySelector('input[type="password"]')?.value;
-    const fullName = document.querySelector('input[type="text"]')?.value;
+async function handleAuthSubmit(form) {
+    const emailInput = form.querySelector('input[type="email"]');
+    const passwordInput = form.querySelector('input[type="password"]');
+    const nameInput = form.querySelector('input[type="text"]');
+    
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value;
+    const fullName = nameInput?.value?.trim();
+    
+    if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        alert('Please enter a valid email address');
+        return;
+    }
+
+    if (password.length < 6) {
+        alert('Password must be at least 6 characters long');
+        return;
+    }
     
     const isSignUp = document.querySelector('.auth-tabs .tab.active')?.textContent.trim() === 'Create Account';
     
-    // Show loading only during auth operations
     showLoadingState();
     
     let result;
     if (isSignUp) {
-        result = await signUpUser(email, password, fullName);
+        if (password.length < 8) {
+            hideLoadingState();
+            alert('Password must be at least 8 characters long');
+            return;
+        }
+        result = await signUpUser(email, password, fullName || email.split('@')[0]);
     } else {
         result = await signInUser(email, password);
     }
@@ -377,63 +694,26 @@ async function handleAuthSubmit(formData) {
     hideLoadingState();
     
     if (!result.success) {
-        alert('Error: ' + result.error);
-    }
-    // Auth state observer will handle redirect
-}
-
-// Transaction Form Submission
-async function handleTransactionSubmit(formData) {
-    if (!currentUser) {
-        alert('Please sign in first');
-        return;
-    }
-    
-    const amount = document.querySelector('.modal-dialog input[type="number"]')?.value;
-    const category = document.querySelector('.modal-dialog select')?.value;
-    const date = document.querySelector('.modal-dialog input[type="date"]')?.value;
-    const description = document.querySelector('.modal-dialog input[type="text"]')?.value;
-    const type = document.querySelector('.transaction-type-tabs .tab.active')?.textContent.trim().toLowerCase();
-    
-    if (!amount || !category || !date || !description) {
-        alert('Please fill in all required fields');
-        return;
-    }
-    
-    const transaction = {
-        amount: amount,
-        category: category,
-        date: date,
-        description: description,
-        type: type
-    };
-    
-    showLoadingState();
-    const result = await addTransaction(currentUser.uid, transaction);
-    hideLoadingState();
-    
-    if (result.success) {
-        // Close modal
-        const modal = document.querySelector('.modal-overlay:not(.signout-modal)');
-        if (modal) {
-            modal.style.display = 'none';
-            document.body.style.overflow = 'auto';
+        let errorMessage = result.error;
+        if (errorMessage.includes('email-already-in-use')) {
+            errorMessage = 'This email is already registered. Please sign in instead.';
+        } else if (errorMessage.includes('wrong-password') || errorMessage.includes('user-not-found')) {
+            errorMessage = 'Invalid email or password.';
+        } else if (errorMessage.includes('weak-password')) {
+            errorMessage = 'Password is too weak. Please use a stronger password.';
         }
-        
-        // Reload transactions
-        await loadUserData();
-        alert('Transaction added successfully!');
-    } else {
-        alert('Error adding transaction: ' + result.error);
+        alert('Error: ' + errorMessage);
     }
 }
 
-// Search Functionality
+// ==========================================
+// SEARCH AND FILTER
+// ==========================================
+
 function initSearch() {
     const searchInput = document.querySelector('.search-section input');
-    
     if (searchInput) {
-        searchInput.addEventListener('input', function(e) {
+        searchInput.addEventListener('input', (e) => {
             const searchTerm = e.target.value.toLowerCase();
             filterTransactions(searchTerm);
         });
@@ -442,25 +722,22 @@ function initSearch() {
 
 function filterTransactions(searchTerm) {
     const transactionItems = document.querySelectorAll('.transaction-item');
-    
-    transactionItems.forEach(transaction => {
-        const name = transaction.querySelector('.transaction-name')?.textContent.toLowerCase();
-        const category = transaction.querySelector('.transaction-category')?.textContent.toLowerCase();
+    transactionItems.forEach(item => {
+        const name = item.querySelector('.transaction-name')?.textContent.toLowerCase() || '';
+        const category = item.querySelector('.transaction-category')?.textContent.toLowerCase() || '';
         
         if (name.includes(searchTerm) || category.includes(searchTerm)) {
-            transaction.style.display = 'flex';
+            item.style.display = 'flex';
         } else {
-            transaction.style.display = 'none';
+            item.style.display = 'none';
         }
     });
 }
 
-// Filter Functionality
 function initFilters() {
     const filterSelect = document.querySelector('.filter-section select');
-    
     if (filterSelect) {
-        filterSelect.addEventListener('change', function(e) {
+        filterSelect.addEventListener('change', (e) => {
             const category = e.target.value;
             filterByCategory(category);
         });
@@ -469,33 +746,70 @@ function initFilters() {
 
 function filterByCategory(category) {
     const transactionItems = document.querySelectorAll('.transaction-item');
-    
-    transactionItems.forEach(transaction => {
-        const transactionCategory = transaction.querySelector('.transaction-category')?.textContent;
+    transactionItems.forEach(item => {
+        const transactionCategory = item.querySelector('.transaction-category')?.textContent || '';
         
         if (category === 'All Categories' || transactionCategory === category) {
-            transaction.style.display = 'flex';
+            item.style.display = 'flex';
         } else {
-            transaction.style.display = 'none';
+            item.style.display = 'none';
         }
     });
 }
 
-// File Upload
+// ==========================================
+// PROFILE DROPDOWN
+// ==========================================
+
+function initProfileDropdown() {
+    const profileBtn = document.querySelector('.profile-btn');
+    const profileContainer = document.querySelector('.profile-container .profile-dropdown');
+    
+    if (profileBtn && profileContainer) {
+        profileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            profileContainer.classList.toggle('active');
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.profile-container')) {
+                profileContainer.classList.remove('active');
+            }
+        });
+        
+        const profileSignoutBtn = profileContainer.querySelector('.profile-signout-btn');
+        if (profileSignoutBtn) {
+            profileSignoutBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const signoutModal = document.querySelector('.signout-modal');
+                if (signoutModal) {
+                    signoutModal.classList.add('show');
+                    signoutModal.style.display = 'flex';
+                    document.body.style.overflow = 'hidden';
+                    profileContainer.classList.remove('active');
+                }
+            });
+        }
+    }
+}
+
+// ==========================================
+// FILE UPLOAD
+// ==========================================
+
 function initFileUpload() {
     const uploadArea = document.querySelector('.upload-area');
-    
     if (uploadArea) {
-        uploadArea.addEventListener('click', function() {
+        uploadArea.addEventListener('click', () => {
             const input = document.createElement('input');
             input.type = 'file';
             input.accept = 'image/*';
             
-            input.addEventListener('change', function(e) {
+            input.addEventListener('change', (e) => {
                 const file = e.target.files[0];
                 if (file) {
-                    console.log('File selected:', file.name);
-                    uploadArea.querySelector('p').textContent = file.name;
+                    const p = uploadArea.querySelector('p');
+                    if (p) p.textContent = `Selected: ${file.name}`;
                 }
             });
             
@@ -504,60 +818,6 @@ function initFileUpload() {
     }
 }
 
-// Export CSV
-function exportToCSV() {
-    let csv = 'Name,Category,Amount,Date\n';
-    
-    transactions.forEach(transaction => {
-        csv += `${transaction.description},${transaction.category},${transaction.amount},${transaction.date}\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'transactions.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
-}
-
-const exportBtn = document.querySelector('.btn-primary.full-width');
-if (exportBtn && exportBtn.textContent.includes('Export')) {
-    exportBtn.addEventListener('click', exportToCSV);
-}
-
-// Settings Form
-const settingsInputs = document.querySelectorAll('.settings-section input, .settings-section select');
-settingsInputs.forEach(input => {
-    input.addEventListener('change', async function() {
-        if (!currentUser) return;
-        
-        const updates = {};
-        if (this.name === 'name' || this.id === 'name') {
-            updates.name = this.value;
-        }
-        
-        if (Object.keys(updates).length > 0) {
-            const result = await updateUserProfile(currentUser.uid, updates);
-            if (result.success) {
-                console.log('Profile updated');
-            }
-        }
-    });
-});
-
-// Handle window resize
-let resizeTimer;
-window.addEventListener('resize', function() {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function() {
-        if (window.innerWidth > 768) {
-            mobileMenu.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-    }, 250);
-});
-
 // ==========================================
 // RENDER TRANSACTIONS
 // ==========================================
@@ -565,6 +825,8 @@ window.addEventListener('resize', function() {
 function renderTransactions() {
     const transactionList = document.querySelector('.transaction-list');
     if (!transactionList) return;
+    
+    console.log('Rendering transactions, count:', transactions.length);
     
     if (transactions.length === 0) {
         transactionList.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 40px;">No transactions yet. Add your first transaction!</p>';
@@ -576,10 +838,11 @@ function renderTransactions() {
         const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const amountClass = transaction.type === 'income' ? 'positive' : 'negative';
         const amountPrefix = transaction.type === 'income' ? '+' : '-';
+        const icon = transaction.type === 'income' ? '↗' : '🏷️';
         
         return `
             <div class="transaction-item">
-                <div class="transaction-icon">${transaction.type === 'income' ? '↗' : '🏷️'}</div>
+                <div class="transaction-icon">${icon}</div>
                 <div class="transaction-details">
                     <div class="transaction-name">${transaction.description}</div>
                     <div class="transaction-category">${transaction.category}</div>
@@ -589,6 +852,8 @@ function renderTransactions() {
             </div>
         `;
     }).join('');
+    
+    console.log('Transactions rendered successfully');
 }
 
 // ==========================================
@@ -621,29 +886,7 @@ function renderCategories() {
             </div>
         `;
     } else {
-        incomeContainer.innerHTML = incomeCategories.map(category => `
-            <div class="category-item">
-                <div class="category-info">
-                    <div class="category-color" style="background: ${category.color};"></div>
-                    <span class="category-name">${category.name}</span>
-                    <span class="category-badge income">Income</span>
-                </div>
-                <div class="category-actions">
-                    <button class="icon-btn" onclick="window.editCategoryHandler('${category.id}')" title="Edit">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
-                    <button class="icon-btn delete" onclick="window.openDeleteModalHandler('${category.id}')" title="Delete">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('');
+        incomeContainer.innerHTML = incomeCategories.map(category => renderCategoryItem(category)).join('');
     }
     
     if (expenseCategories.length === 0) {
@@ -658,30 +901,37 @@ function renderCategories() {
             </div>
         `;
     } else {
-        expenseContainer.innerHTML = expenseCategories.map(category => `
-            <div class="category-item">
-                <div class="category-info">
-                    <div class="category-color" style="background: ${category.color};"></div>
-                    <span class="category-name">${category.name}</span>
-                    <span class="category-badge expense">Expense</span>
-                </div>
-                <div class="category-actions">
-                    <button class="icon-btn" onclick="window.editCategoryHandler('${category.id}')" title="Edit">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                        </svg>
-                    </button>
-                    <button class="icon-btn delete" onclick="window.openDeleteModalHandler('${category.id}')" title="Delete">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `).join('');
+        expenseContainer.innerHTML = expenseCategories.map(category => renderCategoryItem(category)).join('');
     }
+}
+
+function renderCategoryItem(category) {
+    const badgeClass = category.type === 'income' ? 'income' : 'expense';
+    const badgeText = category.type === 'income' ? 'Income' : 'Expense';
+    
+    return `
+        <div class="category-item">
+            <div class="category-info">
+                <div class="category-color" style="background: ${category.color};"></div>
+                <span class="category-name">${category.name}</span>
+                <span class="category-badge ${badgeClass}">${badgeText}</span>
+            </div>
+            <div class="category-actions">
+                <button class="icon-btn" onclick="window.editCategoryHandler('${category.id}')" title="Edit">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                <button class="icon-btn delete" onclick="window.openDeleteModalHandler('${category.id}')" title="Delete">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 // Global handlers for categories
@@ -698,11 +948,15 @@ window.openAddCategoryModal = function(type = 'expense') {
     modalTitle.textContent = 'Add Category';
     typeSelect.value = type;
     modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
 };
 
 window.closeCategoryModal = function() {
     const modal = document.getElementById('category-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
     currentEditId = null;
 };
 
@@ -724,23 +978,28 @@ window.editCategoryHandler = function(id) {
     
     const colorInputs = document.querySelectorAll('input[name="color"]');
     colorInputs.forEach(input => {
-        if (input.value === category.color) {
-            input.checked = true;
-        }
+        input.checked = (input.value === category.color);
     });
     
     modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
 };
 
 window.openDeleteModalHandler = function(id) {
     categoryToDelete = id;
     const modal = document.getElementById('delete-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
 };
 
 window.closeDeleteModal = function() {
     const modal = document.getElementById('delete-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
     categoryToDelete = null;
 };
 
@@ -754,6 +1013,7 @@ window.confirmDeleteCategory = async function() {
     if (result.success) {
         await loadUserData();
         window.closeDeleteModal();
+        alert('Category deleted successfully!');
     } else {
         alert('Error deleting category: ' + result.error);
     }
@@ -771,8 +1031,8 @@ function initCategoryForm() {
             return;
         }
         
-        const name = document.getElementById('category-name').value.trim();
-        const type = document.getElementById('category-type').value;
+        const name = document.getElementById('category-name')?.value?.trim();
+        const type = document.getElementById('category-type')?.value;
         const colorInput = document.querySelector('input[name="color"]:checked');
         const color = colorInput ? colorInput.value : '#10b981';
         
@@ -790,6 +1050,7 @@ function initCategoryForm() {
             if (result.success) {
                 await loadUserData();
                 window.closeCategoryModal();
+                alert('Category updated successfully!');
             } else {
                 alert('Error updating category: ' + result.error);
             }
@@ -800,6 +1061,7 @@ function initCategoryForm() {
             if (result.success) {
                 await loadUserData();
                 window.closeCategoryModal();
+                alert('Category added successfully!');
             } else {
                 alert('Error adding category: ' + result.error);
             }
@@ -808,23 +1070,19 @@ function initCategoryForm() {
 }
 
 function loadCategoriesIntoDropdowns() {
-    const categorySelects = document.querySelectorAll('.filter-section select, .modal-dialog select');
-    
-    if (categorySelects.length === 0) return;
+    const categorySelects = document.querySelectorAll('.filter-section select, #transaction-modal select');
     
     categorySelects.forEach(select => {
         const isFilterDropdown = select.closest('.filter-section');
+        const currentValue = select.value;
         
         if (isFilterDropdown) {
-            const currentValue = select.value;
             select.innerHTML = '<option>All Categories</option>' + 
                 categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
-            select.value = currentValue || 'All Categories';
+            if (currentValue) select.value = currentValue;
         } else {
-            const currentValue = select.value;
-            select.innerHTML = categories.map(c => 
-                `<option value="${c.name}">${c.name}</option>`
-            ).join('');
+            select.innerHTML = '<option value="">Select a category...</option>' +
+                categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
             if (currentValue && categories.find(c => c.name === currentValue)) {
                 select.value = currentValue;
             }
@@ -840,51 +1098,92 @@ function initCategoriesPage() {
     const modal = document.getElementById('category-modal');
     if (modal) {
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                window.closeCategoryModal();
-            }
+            if (e.target === modal) window.closeCategoryModal();
         });
     }
     
     const deleteModal = document.getElementById('delete-modal');
     if (deleteModal) {
         deleteModal.addEventListener('click', (e) => {
-            if (e.target === deleteModal) {
-                window.closeDeleteModal();
-            }
+            if (e.target === deleteModal) window.closeDeleteModal();
         });
     }
 }
 
-function initProfileDropdown() {
-    const profileBtn = document.querySelector('.profile-btn');
-    const profileContainer = document.querySelector('.profile-container .profile-dropdown');
+// ==========================================
+// SETTINGS PAGE
+// ==========================================
+
+function initSettingsPage() {
+    const exportBtn = document.getElementById('export-csv-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportToCSV);
+    }
     
-    if (profileBtn && profileContainer) {
-        profileBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            profileContainer.classList.toggle('active');
-        });
-        
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.profile-container')) {
-                profileContainer.classList.remove('active');
+    const nameInput = document.getElementById('name');
+    if (nameInput) {
+        nameInput.addEventListener('blur', async function() {
+            if (!currentUser) return;
+            const newName = this.value.trim();
+            if (newName) {
+                const result = await updateUserProfile(currentUser.uid, { name: newName });
+                if (result.success) {
+                    console.log('Name updated');
+                    await loadUserData();
+                }
             }
         });
-        
-        const profileSignoutBtn = document.querySelector('.profile-signout-btn');
-        if (profileSignoutBtn) {
-            profileSignoutBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                const signoutModal = document.querySelector('.signout-modal');
-                if (signoutModal) {
-                    signoutModal.style.display = 'flex';
-                    document.body.style.overflow = 'hidden';
-                    profileContainer.classList.remove('active');
-                }
-            });
-        }
+    }
+    
+    const currencySelect = document.getElementById('currency');
+    if (currencySelect) {
+        currencySelect.addEventListener('change', async function() {
+            if (!currentUser) return;
+            const result = await updateUserProfile(currentUser.uid, { currency: this.value });
+            if (result.success) {
+                console.log('Currency updated');
+            }
+        });
     }
 }
 
-console.log('Finance Tracker with Firebase initialized!');
+function exportToCSV() {
+    if (transactions.length === 0) {
+        alert('No transactions to export');
+        return;
+    }
+    
+    let csv = 'Date,Description,Category,Type,Amount\n';
+    
+    transactions.forEach(transaction => {
+        const date = new Date(transaction.date).toLocaleDateString();
+        const desc = transaction.description.replace(/,/g, ';');
+        csv += `${date},${desc},${transaction.category},${transaction.type},${transaction.amount}\n`;
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+}
+
+// ==========================================
+// WINDOW RESIZE HANDLER
+// ==========================================
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        const mobileMenu = document.querySelector('.mobile-menu');
+        if (window.innerWidth > 768 && mobileMenu) {
+            mobileMenu.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+    }, 250);
+});
+
+console.log('✅ Finance Tracker fully initialized and ready!');
