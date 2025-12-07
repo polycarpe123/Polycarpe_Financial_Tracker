@@ -285,15 +285,16 @@ function initTransactionModal() {
     console.log('Initializing transaction modal...');
     
     // Find and attach to all "Add Transaction" buttons
-    const addBtns = document.querySelectorAll('.btn-primary');
+    const addBtns = document.querySelectorAll('.btn-primary, #add-transaction-btn');
     addBtns.forEach(btn => {
-        if (btn.textContent.includes('Add Transaction')) {
+        if (btn.textContent.includes('Add Transaction') || btn.id === 'add-transaction-btn') {
             // Remove any existing listeners
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
             
             newBtn.addEventListener('click', (e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 console.log('Add Transaction button clicked');
                 openTransactionModal();
             });
@@ -317,26 +318,34 @@ function initTransactionModal() {
         // Handle form submission - CRITICAL FIX
         const form = modal.querySelector('form');
         if (form) {
-            // Remove default form submission
-            form.addEventListener('submit', (e) => {
+            // Remove any existing submit listeners
+            const newForm = form.cloneNode(true);
+            form.parentNode.replaceChild(newForm, form);
+            
+            // Add submit event listener to the NEW form
+            newForm.addEventListener('submit', function(e) {
                 e.preventDefault();
+                e.stopPropagation();
                 console.log('Form submit event triggered');
                 handleTransactionSubmit();
             });
             
-            // Also handle the submit button directly
-            const submitBtn = form.querySelector('button[type="submit"], .btn-primary:not(.btn-secondary)');
+            // Also add click handler to submit button as backup
+            const submitBtn = newForm.querySelector('button[type="submit"]');
             if (submitBtn) {
-                submitBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    console.log('Submit button clicked directly');
-                    handleTransactionSubmit();
+                submitBtn.addEventListener('click', function(e) {
+                    if (newForm.checkValidity()) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Submit button clicked');
+                        handleTransactionSubmit();
+                    }
                 });
             }
         }
         
         // Close button handlers
-        const closeBtns = modal.querySelectorAll('.close-btn, .btn-secondary');
+        const closeBtns = modal.querySelectorAll('.close-btn, .close-modal-btn');
         closeBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -351,9 +360,11 @@ function initTransactionModal() {
             }
         });
     }
+    
+    console.log('Transaction modal initialization complete');
 }
 
-function openTransactionModal() {
+function openTransactionModal(transactionId = null) {
     console.log('Opening transaction modal...');
     const modal = document.getElementById('transaction-modal');
     
@@ -362,26 +373,64 @@ function openTransactionModal() {
         return;
     }
     
-    // Reset form
+    const modalTitle = modal.querySelector('.modal-header h2');
     const form = modal.querySelector('form');
-    if (form) form.reset();
     
-    // Set today's date
-    const dateInput = modal.querySelector('input[type="date"]');
-    if (dateInput) {
-        dateInput.value = new Date().toISOString().split('T')[0];
-    }
-    
-    // Reset to expense
-    currentTransactionType = 'expense';
-    const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
-    tabs.forEach(tab => {
-        if (tab.textContent.trim().toLowerCase() === 'expense') {
-            tab.classList.add('active');
-        } else {
-            tab.classList.remove('active');
+    if (transactionId) {
+        // EDIT MODE
+        const transaction = transactions.find(t => t.id === transactionId);
+        if (!transaction) return;
+        
+        currentEditId = transactionId;
+        if (modalTitle) modalTitle.textContent = 'Edit Transaction';
+        
+        // Fill in the form with existing transaction data
+        modal.querySelector('input[type="number"]').value = transaction.amount;
+        modal.querySelector('select').value = transaction.category;
+        modal.querySelector('input[type="date"]').value = new Date(transaction.date).toISOString().split('T')[0];
+        modal.querySelector('input[type="text"]').value = transaction.description;
+        
+        // Set the transaction type (income/expense)
+        currentTransactionType = transaction.type;
+        const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
+        tabs.forEach(tab => {
+            if (tab.textContent.trim().toLowerCase() === transaction.type) {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+        
+        // Change submit button text
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = 'Update Transaction';
+    } else {
+        // ADD MODE
+        currentEditId = null;
+        if (form) form.reset();
+        if (modalTitle) modalTitle.textContent = 'Add Transaction';
+        
+        // Set today's date
+        const dateInput = modal.querySelector('input[type="date"]');
+        if (dateInput) {
+            dateInput.value = new Date().toISOString().split('T')[0];
         }
-    });
+        
+        // Reset to expense
+        currentTransactionType = 'expense';
+        const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
+        tabs.forEach(tab => {
+            if (tab.textContent.trim().toLowerCase() === 'expense') {
+                tab.classList.add('active');
+            } else {
+                tab.classList.remove('active');
+            }
+        });
+        
+        // Change submit button text
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = 'Add Transaction';
+    }
     
     // Show modal
     modal.classList.add('show');
@@ -408,49 +457,55 @@ async function handleTransactionSubmit() {
         return;
     }
     
-    const modal = document.getElementById('transaction-modal');
-    if (!modal) {
-        console.error('Modal not found');
+    // Get form values directly by ID
+    const amountInput = document.getElementById('transaction-amount');
+    const categorySelect = document.getElementById('transaction-category');
+    const dateInput = document.getElementById('transaction-date');
+    const descriptionInput = document.getElementById('transaction-description');
+    
+    if (!amountInput || !categorySelect || !dateInput || !descriptionInput) {
+        console.error('Could not find form inputs!');
+        alert('Form error - please refresh the page');
         return;
     }
     
-    const form = modal.querySelector('form');
-    if (!form) {
-        console.error('Form not found');
-        return;
-    }
-    
-    // Get form values
-    const amountInput = form.querySelector('input[type="number"]');
-    const categorySelect = form.querySelector('select');
-    const dateInput = form.querySelector('input[type="date"]');
-    const descriptionInput = form.querySelector('input[type="text"]');
-    
-    console.log('Form elements:', {
-        amount: !!amountInput,
-        category: !!categorySelect,
-        date: !!dateInput,
-        description: !!descriptionInput
-    });
-    
-    const amount = amountInput?.value;
-    const category = categorySelect?.value;
-    const date = dateInput?.value;
-    const description = descriptionInput?.value?.trim();
+    // Get values
+    const amount = amountInput.value.trim();
+    const category = categorySelect.value.trim();
+    const date = dateInput.value.trim();
+    const description = descriptionInput.value.trim();
     
     console.log('Form values:', { amount, category, date, description, type: currentTransactionType });
     
     // Validation
-    if (!amount || !category || !date || !description) {
-        console.error('Missing fields');
-        alert('Please fill in all required fields');
+    if (!amount) {
+        alert('Please enter an amount');
+        amountInput.focus();
+        return;
+    }
+    
+    if (!category) {
+        alert('Please select a category');
+        categorySelect.focus();
+        return;
+    }
+    
+    if (!date) {
+        alert('Please select a date');
+        dateInput.focus();
+        return;
+    }
+    
+    if (!description) {
+        alert('Please enter a description');
+        descriptionInput.focus();
         return;
     }
     
     const numAmount = parseFloat(amount);
     if (numAmount <= 0 || isNaN(numAmount)) {
-        console.error('Invalid amount');
         alert('Amount must be greater than 0');
+        amountInput.focus();
         return;
     }
     
@@ -469,33 +524,45 @@ async function handleTransactionSubmit() {
     showLoadingState();
     
     try {
-        const result = await addTransaction(currentUser.uid, transaction);
+        let result;
+        
+        if (currentEditId) {
+            console.log('Updating transaction:', currentEditId);
+            result = await updateTransaction(currentUser.uid, currentEditId, transaction);
+        } else {
+            console.log('Adding new transaction');
+            result = await addTransaction(currentUser.uid, transaction);
+        }
+        
         console.log('Firebase result:', result);
         
         if (result.success) {
-            console.log('✅ Transaction added successfully!');
+            console.log('✅ Transaction saved successfully!');
             
             // Close modal
             closeTransactionModal();
             
             // Reset form
-            form.reset();
+            amountInput.value = '';
+            categorySelect.value = '';
+            dateInput.value = '';
+            descriptionInput.value = '';
             
             // Reload data
-            console.log('Reloading user data...');
             await loadUserData();
             
             hideLoadingState();
-            alert('Transaction added successfully!');
             
-            console.log('Transaction count after reload:', transactions.length);
+            alert(currentEditId ? 'Transaction updated successfully!' : 'Transaction added successfully!');
+            
+            currentEditId = null;
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        console.error('Error adding transaction:', error);
+        console.error('Error saving transaction:', error);
         hideLoadingState();
-        alert('Error adding transaction: ' + error.message);
+        alert('Error saving transaction: ' + error.message);
     }
 }
 
@@ -841,16 +908,30 @@ function renderTransactions() {
         const icon = transaction.type === 'income' ? '↗' : '🏷️';
         
         return `
-            <div class="transaction-item">
-                <div class="transaction-icon">${icon}</div>
-                <div class="transaction-details">
-                    <div class="transaction-name">${transaction.description}</div>
-                    <div class="transaction-category">${transaction.category}</div>
-                </div>
-                <div class="transaction-amount ${amountClass}">${amountPrefix}$${transaction.amount.toFixed(2)}</div>
-                <div class="transaction-date">${formattedDate}</div>
-            </div>
-        `;
+    <div class="transaction-item" data-id="${transaction.id}">
+        <div class="transaction-icon">${icon}</div>
+        <div class="transaction-details">
+            <div class="transaction-name">${transaction.description}</div>
+            <div class="transaction-category">${transaction.category}</div>
+        </div>
+        <div class="transaction-amount ${amountClass}">${amountPrefix}$${transaction.amount.toFixed(2)}</div>
+        <div class="transaction-date">${formattedDate}</div>
+        <div class="transaction-actions" style="display: flex; gap: 8px; margin-left: 12px;">
+            <button class="icon-btn" onclick="window.editTransactionHandler('${transaction.id}')" title="Edit">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            </button>
+            <button class="icon-btn delete" onclick="window.openDeleteTransactionModal('${transaction.id}')" title="Delete">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+`;
     }).join('');
     
     console.log('Transactions rendered successfully');
@@ -1187,3 +1268,51 @@ window.addEventListener('resize', () => {
 });
 
 console.log('✅ Finance Tracker fully initialized and ready!');
+
+
+window.editTransactionHandler = function(id) {
+    openTransactionModal(id);
+};
+
+window.openDeleteTransactionModal = function(id) {
+    transactionToDelete = id;
+    const modal = document.createElement('div');
+    modal.id = 'delete-transaction-modal';
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-dialog small">
+            <h2>Delete Transaction?</h2>
+            <p>Are you sure you want to delete this transaction? This action cannot be undone.</p>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeDeleteTransactionModal()">Cancel</button>
+                <button class="btn-danger" onclick="confirmDeleteTransaction()">Delete</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+};
+
+window.closeDeleteTransactionModal = function() {
+    const modal = document.getElementById('delete-transaction-modal');
+    if (modal) modal.remove();
+    document.body.style.overflow = 'auto';
+    transactionToDelete = null;
+};
+
+window.confirmDeleteTransaction = async function() {
+    if (!transactionToDelete || !currentUser) return;
+    
+    showLoadingState();
+    const result = await deleteTransaction(currentUser.uid, transactionToDelete);
+    hideLoadingState();
+    
+    if (result.success) {
+        await loadUserData();
+        closeDeleteTransactionModal();
+        alert('Transaction deleted successfully!');
+    } else {
+        alert('Error deleting transaction: ' + result.error);
+    }
+};
