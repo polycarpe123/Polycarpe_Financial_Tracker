@@ -28,6 +28,7 @@ let transactions = [];
 let currentEditId = null;
 let categoryToDelete = null;
 let currentTransactionType = 'expense';
+let transactionToDelete = null;
 
 // ==========================================
 // AUTH STATE OBSERVER
