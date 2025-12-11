@@ -7,13 +7,28 @@ import { getTransactions } from './firebase-config.js';
 
 let balanceTrendChart = null;
 
-// Wait for user authentication
-onAuthStateChanged(auth, async (user) => {
-    if (user && window.location.pathname.includes('Dashboard')) {
-        console.log('📊 Loading dashboard for user:', user.uid);
-        await loadDashboard(user.uid);
-    }
-});
+// Wait for user authentication and DOM ready
+let isDashboardInitialized = false;
+
+function initDashboard() {
+    if (isDashboardInitialized) return;
+    
+    onAuthStateChanged(auth, async (user) => {
+        if (user && window.location.pathname.includes('Dashboard')) {
+            console.log('📊 Loading dashboard for user:', user.uid);
+            await loadDashboard(user.uid);
+        }
+    });
+    
+    isDashboardInitialized = true;
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDashboard);
+} else {
+    initDashboard();
+}
 
 async function loadDashboard(userId) {
     try {

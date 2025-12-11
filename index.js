@@ -1,4 +1,4 @@
-// Finance Tracker JavaScript with Firebase Integration - COMPLETE FIX
+// Finance Tracker JavaScript - INSTANT LOADING VERSION
 
 import { 
     auth,
@@ -29,9 +29,11 @@ let currentEditId = null;
 let categoryToDelete = null;
 let currentTransactionType = 'expense';
 let transactionToDelete = null;
+let isDataLoaded = false;
+let userProfile = null;
 
 // ==========================================
-// AUTH STATE OBSERVER
+// AUTH STATE OBSERVER - INSTANT LOAD
 // ==========================================
 
 onAuthStateChanged(auth, async (user) => {
@@ -41,98 +43,82 @@ onAuthStateChanged(auth, async (user) => {
         
         // If on landing page, redirect to dashboard
         if (document.querySelector('.landing-page')) {
-            console.log('📍 On landing page, redirecting to Dashboard...');
             window.location.href = 'Dashboard.html';
-        } else {
-            // Display user info immediately from auth object
-            displayUserFromAuth(user);
-            
-            // Then show loading and load full data
-            showPageLoadingState();
-            await loadUserData();
-            hidePageLoadingState();
+            return;
+        }
+        
+        // Display user info INSTANTLY
+        displayUserFromAuth(user);
+        
+        // Load data silently in background (no loading indicator)
+        if (!isDataLoaded) {
+            loadUserDataSilently();
         }
     } else {
         currentUser = null;
         console.log('❌ User signed out');
         
-        // If not on landing page, redirect to login
         if (!document.querySelector('.landing-page')) {
-            console.log('📍 Not on landing page, redirecting to login...');
             window.location.href = 'index.html';
         }
     }
 });
 
 // ==========================================
-// LOAD USER DATA
+// SILENT DATA LOADING (NO INDICATORS)
 // ==========================================
 
-async function loadUserData() {
-    if (!currentUser) {
-        console.error('❌ No current user');
-        return;
-    }
+async function loadUserDataSilently() {
+    if (!currentUser) return;
     
     try {
-        console.log('📊 Loading user data for:', currentUser.uid);
+        console.log('📊 Loading data silently...');
         
-        // 1. Get user profile
+        // Load user profile
         const profileResult = await getUserProfile(currentUser.uid);
         if (profileResult.success) {
-            console.log('✅ Profile loaded:', profileResult.data);
-            updateUIWithUserProfile(profileResult.data);
+            userProfile = profileResult.data;
+            updateUIWithUserProfile(userProfile);
         } else {
-            console.error('❌ Failed to load profile:', profileResult.error);
-            // If profile doesn't exist, create one
-            console.log('🔄 Creating missing profile...');
-            const profileData = {
+            // Create missing profile
+            userProfile = {
                 name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
                 email: currentUser.email,
                 currency: 'USD',
                 notifications: true
             };
-            await updateUserProfile(currentUser.uid, profileData);
-            updateUIWithUserProfile(profileData);
+            await updateUserProfile(currentUser.uid, userProfile);
+            updateUIWithUserProfile(userProfile);
         }
         
-        // 2. Get categories
+        // Load categories
         const categoriesResult = await getCategories(currentUser.uid);
         if (categoriesResult.success) {
             categories = categoriesResult.data;
-            console.log('✅ Categories loaded:', categories.length);
             
-            // If no categories, initialize defaults
             if (categories.length === 0) {
-                console.log('🔄 No categories found, initializing defaults...');
                 await initializeDefaultCategories(currentUser.uid);
                 const newCategoriesResult = await getCategories(currentUser.uid);
                 categories = newCategoriesResult.data;
-                console.log('✅ Default categories created:', categories.length);
             }
             
             renderCategories();
             loadCategoriesIntoDropdowns();
-        } else {
-            console.error('❌ Failed to load categories:', categoriesResult.error);
         }
         
-        // 3. Get transactions
+        // Load transactions
         const transactionsResult = await getTransactions(currentUser.uid);
         if (transactionsResult.success) {
             transactions = transactionsResult.data;
-            console.log('✅ Transactions loaded:', transactions.length);
             renderTransactions();
             updateDashboardStats();
-        } else {
-            console.error('❌ Failed to load transactions:', transactionsResult.error);
         }
         
-        console.log('✅ All user data loaded successfully');
+        isDataLoaded = true;
+        console.log('✅ Data loaded silently');
         
     } catch (error) {
-        console.error('❌ Error loading user data:', error);
-        alert('Error loading data. Please refresh the page.');
+        console.error('Error loading data:', error);
     }
 }
 
@@ -141,90 +127,43 @@ async function loadUserData() {
 // ==========================================
 
 function updateUIWithUserProfile(profile) {
-    console.log('🔄 Updating UI with profile:', profile);
-    
-    // Top Navigation Bar - User Name
     const topNavUserName = document.getElementById('topNavUserName');
-    if (topNavUserName) {
-        topNavUserName.textContent = profile.name || profile.email?.split('@')[0] || 'User';
-        console.log('✅ Updated top nav user name');
-    } else {
-        console.warn('⚠️ topNavUserName element not found');
-    }
+    if (topNavUserName) topNavUserName.textContent = profile.name || profile.email?.split('@')[0] || 'User';
     
-    // Top Navigation Bar - User Email
     const topNavUserEmail = document.getElementById('topNavUserEmail');
-    if (topNavUserEmail) {
-        topNavUserEmail.textContent = profile.email || '';
-        console.log('✅ Updated top nav user email');
-    } else {
-        console.warn('⚠️ topNavUserEmail element not found');
-    }
+    if (topNavUserEmail) topNavUserEmail.textContent = profile.email || '';
     
-    // Profile Dropdown - User Name
     const dropdownUserName = document.getElementById('dropdownUserName');
-    if (dropdownUserName) {
-        dropdownUserName.textContent = profile.name || profile.email?.split('@')[0] || 'User';
-        console.log('✅ Updated dropdown user name');
-    } else {
-        console.warn('⚠️ dropdownUserName element not found');
-    }
+    if (dropdownUserName) dropdownUserName.textContent = profile.name || profile.email?.split('@')[0] || 'User';
     
-    // Profile Dropdown - User Email
     const dropdownUserEmail = document.getElementById('dropdownUserEmail');
-    if (dropdownUserEmail) {
-        dropdownUserEmail.textContent = profile.email || '';
-        console.log('✅ Updated dropdown user email');
-    } else {
-        console.warn('⚠️ dropdownUserEmail element not found');
-    }
+    if (dropdownUserEmail) dropdownUserEmail.textContent = profile.email || '';
     
-    // Settings Page - Name Input
     const nameInput = document.getElementById('name');
-    if (nameInput) {
-        nameInput.value = profile.name || '';
-        console.log('✅ Updated settings name input');
-    }
+    if (nameInput) nameInput.value = profile.name || '';
     
-    // Settings Page - Email Input
     const emailInput = document.getElementById('email');
-    if (emailInput) {
-        emailInput.value = profile.email || '';
-        console.log('✅ Updated settings email input');
-    }
+    if (emailInput) emailInput.value = profile.email || '';
     
-    // Settings Page - Currency Select
     const currencySelect = document.getElementById('currency');
-    if (currencySelect && profile.currency) {
-        currencySelect.value = profile.currency;
-        console.log('✅ Updated settings currency');
-    }
-    
-    console.log('✅ UI update complete');
+    if (currencySelect && profile.currency) currencySelect.value = profile.currency;
 }
 
 function displayUserFromAuth(user) {
-    console.log('🔄 Displaying user from auth object:', user.email);
-    
-    // Use email as fallback if profile isn't loaded yet
     const displayName = user.displayName || user.email?.split('@')[0] || 'User';
     const email = user.email || '';
     
-    // Update top nav
     const topNavUserName = document.getElementById('topNavUserName');
     if (topNavUserName) topNavUserName.textContent = displayName;
     
     const topNavUserEmail = document.getElementById('topNavUserEmail');
     if (topNavUserEmail) topNavUserEmail.textContent = email;
     
-    // Update dropdown
     const dropdownUserName = document.getElementById('dropdownUserName');
     if (dropdownUserName) dropdownUserName.textContent = displayName;
     
     const dropdownUserEmail = document.getElementById('dropdownUserEmail');
     if (dropdownUserEmail) dropdownUserEmail.textContent = email;
-    
-    console.log('✅ User displayed from auth');
 }
 
 function updateDashboardStats() {
@@ -263,29 +202,27 @@ function updateDashboardStats() {
     }
 }
 
-function showLoadingState() {
-    const existing = document.getElementById('loading-overlay');
+// Simple loading for user actions only (not page load)
+function showActionLoading() {
+    const existing = document.getElementById('action-loading');
     if (existing) return;
     
     const loadingDiv = document.createElement('div');
-    loadingDiv.id = 'loading-overlay';
+    loadingDiv.id = 'action-loading';
     loadingDiv.style.cssText = `
         position: fixed;
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(255, 255, 255, 0.95);
+        background: rgba(255, 255, 255, 0.9);
         display: flex;
         align-items: center;
         justify-content: center;
         z-index: 9999;
     `;
     loadingDiv.innerHTML = `
-        <div style="text-align: center;">
-            <div style="width: 40px; height: 40px; margin: 0 auto 12px; border: 3px solid #e5e7eb; border-top: 3px solid #10b981; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-            <p style="font-size: 16px; color: #10b981; font-weight: 500;">Processing...</p>
-        </div>
+        <div style="width: 40px; height: 40px; border: 3px solid #e5e7eb; border-top: 3px solid #10b981; border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
         <style>
             @keyframes spin {
                 0% { transform: rotate(0deg); }
@@ -296,75 +233,19 @@ function showLoadingState() {
     document.body.appendChild(loadingDiv);
 }
 
-function hideLoadingState() {
-    const loadingDiv = document.getElementById('loading-overlay');
+function hideActionLoading() {
+    const loadingDiv = document.getElementById('action-loading');
     if (loadingDiv) loadingDiv.remove();
 }
 
-function showPageLoadingState() {
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-        mainContent.style.visibility = 'hidden';
-        mainContent.style.opacity = '0';
-    }
-    
-    const existing = document.getElementById('page-loading-overlay');
-    if (existing) return;
-    
-    const loadingDiv = document.createElement('div');
-    loadingDiv.id = 'page-loading-overlay';
-    loadingDiv.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: #f9fafb;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    `;
-    loadingDiv.innerHTML = `
-        <div style="text-align: center;">
-            <div style="width: 60px; height: 60px; margin: 0 auto 20px; border: 4px solid #e5e7eb; border-top: 4px solid #10b981; border-radius: 50%; animation: spin 1s linear infinite;"></div>
-            <p style="font-size: 18px; color: #10b981; font-weight: 500;">Loading your data...</p>
-        </div>
-    `;
-    document.body.appendChild(loadingDiv);
-}
-
-function hidePageLoadingState() {
-    const loadingDiv = document.getElementById('page-loading-overlay');
-    if (loadingDiv) {
-        loadingDiv.style.transition = 'opacity 0.3s ease';
-        loadingDiv.style.opacity = '0';
-        setTimeout(() => loadingDiv.remove(), 300);
-    }
-    
-    const mainContent = document.querySelector('.main-content');
-    if (mainContent) {
-        mainContent.style.transition = 'opacity 0.3s ease';
-        mainContent.style.visibility = 'visible';
-        mainContent.style.opacity = '1';
-    }
-}
-
 // ==========================================
-// INITIALIZATION
+// INITIALIZATION - NO LOADING SCREEN
 // ==========================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM Content Loaded - Initializing...');
+    console.log('🚀 Initializing app...');
     
-    if (!document.querySelector('.landing-page')) {
-        const mainContent = document.querySelector('.main-content');
-        if (mainContent) {
-            mainContent.style.visibility = 'hidden';
-            mainContent.style.opacity = '0';
-        }
-    }
-    
+    // Initialize all features immediately
     initAuthTabs();
     initMobileMenu();
     initModals();
@@ -376,38 +257,35 @@ document.addEventListener('DOMContentLoaded', function() {
     initFileUpload();
     initSettingsPage();
     
-    // Initialize transaction modal LAST to ensure everything is ready
+    // Initialize transaction modal
     setTimeout(() => {
         initTransactionModal();
-        console.log('Transaction modal initialized');
-    }, 500);
+        console.log('✅ Transaction modal initialized');
+    }, 100);
 });
 
 // ==========================================
-// TRANSACTION MODAL - COMPLETE REWRITE
+// TRANSACTION MODAL
 // ==========================================
 
 function initTransactionModal() {
     console.log('Initializing transaction modal...');
     
-    // Find and attach to all "Add Transaction" buttons
     const addBtns = document.querySelectorAll('.btn-primary, #add-transaction-btn');
     addBtns.forEach(btn => {
         if (btn.textContent.includes('Add Transaction') || btn.id === 'add-transaction-btn') {
-            // Remove any existing listeners
             const newBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(newBtn, btn);
             
             newBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Add Transaction button clicked');
+                console.log('✅ Add Transaction button clicked');
                 openTransactionModal();
             });
         }
     });
     
-    // Initialize transaction type tabs
     const modal = document.getElementById('transaction-modal');
     if (modal) {
         const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
@@ -417,40 +295,21 @@ function initTransactionModal() {
                 tabs.forEach(t => t.classList.remove('active'));
                 this.classList.add('active');
                 currentTransactionType = this.textContent.trim().toLowerCase();
-                console.log('Transaction type changed to:', currentTransactionType);
             });
         });
         
-        // Handle form submission - CRITICAL FIX
         const form = modal.querySelector('form');
         if (form) {
-            // Remove any existing submit listeners
             const newForm = form.cloneNode(true);
             form.parentNode.replaceChild(newForm, form);
             
-            // Add submit event listener to the NEW form
             newForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Form submit event triggered');
                 handleTransactionSubmit();
             });
-            
-            // Also add click handler to submit button as backup
-            const submitBtn = newForm.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.addEventListener('click', function(e) {
-                    if (newForm.checkValidity()) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        console.log('Submit button clicked');
-                        handleTransactionSubmit();
-                    }
-                });
-            }
         }
         
-        // Close button handlers
         const closeBtns = modal.querySelectorAll('.close-btn, .close-modal-btn');
         closeBtns.forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -459,44 +318,31 @@ function initTransactionModal() {
             });
         });
         
-        // Click outside to close
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeTransactionModal();
-            }
+            if (e.target === modal) closeTransactionModal();
         });
     }
-    
-    console.log('Transaction modal initialization complete');
 }
 
 function openTransactionModal(transactionId = null) {
-    console.log('Opening transaction modal...');
     const modal = document.getElementById('transaction-modal');
-    
-    if (!modal) {
-        console.error('Transaction modal not found!');
-        return;
-    }
+    if (!modal) return;
     
     const modalTitle = modal.querySelector('.modal-header h2');
     const form = modal.querySelector('form');
     
     if (transactionId) {
-        // EDIT MODE
         const transaction = transactions.find(t => t.id === transactionId);
         if (!transaction) return;
         
         currentEditId = transactionId;
         if (modalTitle) modalTitle.textContent = 'Edit Transaction';
         
-        // Fill in the form with existing transaction data
-        modal.querySelector('input[type="number"]').value = transaction.amount;
-        modal.querySelector('select').value = transaction.category;
-        modal.querySelector('input[type="date"]').value = new Date(transaction.date).toISOString().split('T')[0];
-        modal.querySelector('input[type="text"]').value = transaction.description;
+        modal.querySelector('#transaction-amount').value = transaction.amount;
+        modal.querySelector('#transaction-category').value = transaction.category;
+        modal.querySelector('#transaction-date').value = new Date(transaction.date).toISOString().split('T')[0];
+        modal.querySelector('#transaction-description').value = transaction.description;
         
-        // Set the transaction type (income/expense)
         currentTransactionType = transaction.type;
         const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
         tabs.forEach(tab => {
@@ -507,22 +353,16 @@ function openTransactionModal(transactionId = null) {
             }
         });
         
-        // Change submit button text
         const submitBtn = form.querySelector('button[type="submit"]');
         if (submitBtn) submitBtn.textContent = 'Update Transaction';
     } else {
-        // ADD MODE
         currentEditId = null;
         if (form) form.reset();
         if (modalTitle) modalTitle.textContent = 'Add Transaction';
         
-        // Set today's date
-        const dateInput = modal.querySelector('input[type="date"]');
-        if (dateInput) {
-            dateInput.value = new Date().toISOString().split('T')[0];
-        }
+        const dateInput = modal.querySelector('#transaction-date');
+        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
         
-        // Reset to expense
         currentTransactionType = 'expense';
         const tabs = modal.querySelectorAll('.transaction-type-tabs .tab');
         tabs.forEach(tab => {
@@ -533,16 +373,13 @@ function openTransactionModal(transactionId = null) {
             }
         });
         
-        // Change submit button text
         const submitBtn = form.querySelector('button[type="submit"]');
         if (submitBtn) submitBtn.textContent = 'Add Transaction';
     }
     
-    // Show modal
     modal.classList.add('show');
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
-    console.log('Modal opened successfully');
 }
 
 function closeTransactionModal() {
@@ -555,67 +392,37 @@ function closeTransactionModal() {
 }
 
 async function handleTransactionSubmit() {
-    console.log('=== HANDLING TRANSACTION SUBMISSION ===');
-    
     if (!currentUser) {
-        console.error('No user logged in');
         alert('Please sign in first');
         return;
     }
     
-    // Get form values directly by ID
     const amountInput = document.getElementById('transaction-amount');
     const categorySelect = document.getElementById('transaction-category');
     const dateInput = document.getElementById('transaction-date');
     const descriptionInput = document.getElementById('transaction-description');
     
     if (!amountInput || !categorySelect || !dateInput || !descriptionInput) {
-        console.error('Could not find form inputs!');
         alert('Form error - please refresh the page');
         return;
     }
     
-    // Get values
     const amount = amountInput.value.trim();
     const category = categorySelect.value.trim();
     const date = dateInput.value.trim();
     const description = descriptionInput.value.trim();
     
-    console.log('Form values:', { amount, category, date, description, type: currentTransactionType });
-    
-    // Validation
-    if (!amount) {
-        alert('Please enter an amount');
-        amountInput.focus();
-        return;
-    }
-    
-    if (!category) {
-        alert('Please select a category');
-        categorySelect.focus();
-        return;
-    }
-    
-    if (!date) {
-        alert('Please select a date');
-        dateInput.focus();
-        return;
-    }
-    
-    if (!description) {
-        alert('Please enter a description');
-        descriptionInput.focus();
+    if (!amount || !category || !date || !description) {
+        alert('Please fill in all fields');
         return;
     }
     
     const numAmount = parseFloat(amount);
     if (numAmount <= 0 || isNaN(numAmount)) {
         alert('Amount must be greater than 0');
-        amountInput.focus();
         return;
     }
     
-    // Create transaction object
     const transaction = {
         amount: numAmount,
         category: category,
@@ -624,56 +431,34 @@ async function handleTransactionSubmit() {
         type: currentTransactionType
     };
     
-    console.log('Submitting transaction:', transaction);
-    
-    // Submit to Firebase
-    showLoadingState();
+    showActionLoading();
     
     try {
         let result;
         
         if (currentEditId) {
-            console.log('Updating transaction:', currentEditId);
             result = await updateTransaction(currentUser.uid, currentEditId, transaction);
         } else {
-            console.log('Adding new transaction');
             result = await addTransaction(currentUser.uid, transaction);
         }
         
-        console.log('Firebase result:', result);
-        
         if (result.success) {
-            console.log('✅ Transaction saved successfully!');
-            
-            // Close modal
             closeTransactionModal();
-            
-            // Reset form
-            amountInput.value = '';
-            categorySelect.value = '';
-            dateInput.value = '';
-            descriptionInput.value = '';
-            
-            // Reload data
-            await loadUserData();
-            
-            hideLoadingState();
-            
-            alert(currentEditId ? 'Transaction updated successfully!' : 'Transaction added successfully!');
-            
+            await loadUserDataSilently();
+            hideActionLoading();
+            alert(currentEditId ? 'Transaction updated!' : 'Transaction added!');
             currentEditId = null;
         } else {
             throw new Error(result.error);
         }
     } catch (error) {
-        console.error('Error saving transaction:', error);
-        hideLoadingState();
-        alert('Error saving transaction: ' + error.message);
+        hideActionLoading();
+        alert('Error: ' + error.message);
     }
 }
 
 // ==========================================
-// TAB FUNCTIONALITY
+// AUTH TABS
 // ==========================================
 
 function initAuthTabs() {
@@ -740,7 +525,7 @@ function initMobileMenu() {
 // ==========================================
 
 function initModals() {
-    const signOutBtns = document.querySelectorAll('.sign-out, .nav-item.sign-out');
+    const signOutBtns = document.querySelectorAll('.sign-out, .nav-item.sign-out, .profile-signout-btn');
     signOutBtns.forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -753,7 +538,7 @@ function initModals() {
         });
     });
     
-    const closeBtns = document.querySelectorAll('.signout-modal .close-btn, .signout-modal .btn-secondary');
+    const closeBtns = document.querySelectorAll('.signout-modal .btn-secondary');
     closeBtns.forEach(btn => {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
@@ -780,9 +565,9 @@ function initModals() {
     const confirmSignOutBtn = document.querySelector('.signout-modal .btn-danger');
     if (confirmSignOutBtn) {
         confirmSignOutBtn.addEventListener('click', async () => {
-            showLoadingState();
+            showActionLoading();
             const result = await signOutUser();
-            hideLoadingState();
+            hideActionLoading();
             
             if (result.success) {
                 window.location.href = 'index.html';
@@ -794,11 +579,10 @@ function initModals() {
 }
 
 // ==========================================
-// AUTH FORM HANDLING
+// AUTH FORMS
 // ==========================================
 
 function initAuthForms() {
-    // Handle Sign In Form (index.html)
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
@@ -807,7 +591,6 @@ function initAuthForms() {
         });
     }
     
-    // Handle Sign Up Form (index_1.html)
     const signupForm = document.getElementById('signup-form');
     if (signupForm) {
         signupForm.addEventListener('submit', async (e) => {
@@ -816,14 +599,13 @@ function initAuthForms() {
         });
     }
     
-    // Handle Google Sign In Button
     const googleBtn = document.querySelector('button[type="button"]');
     if (googleBtn && googleBtn.textContent.includes('Google')) {
         googleBtn.addEventListener('click', async (e) => {
             e.preventDefault();
-            showLoadingState();
+            showActionLoading();
             const result = await signInWithGoogle();
-            hideLoadingState();
+            hideActionLoading();
             
             if (!result.success) {
                 alert('Error signing in with Google: ' + result.error);
@@ -832,15 +614,12 @@ function initAuthForms() {
     }
 }
 
-// Handle Sign In
 async function handleSignIn(form) {
     const emailInput = form.querySelector('input[type="email"]');
     const passwordInput = form.querySelector('input[type="password"]');
     
     const email = emailInput?.value?.trim();
     const password = passwordInput?.value;
-    
-    console.log('🔵 Sign In attempt:', email);
     
     if (!email || !password) {
         alert('Please enter email and password');
@@ -858,11 +637,9 @@ async function handleSignIn(form) {
         return;
     }
     
-    showLoadingState();
-    
+    showActionLoading();
     const result = await signInUser(email, password);
-    
-    hideLoadingState();
+    hideActionLoading();
     
     if (!result.success) {
         let errorMessage = result.error;
@@ -873,7 +650,6 @@ async function handleSignIn(form) {
     }
 }
 
-// Handle Sign Up
 async function handleSignUp(form) {
     const nameInput = form.querySelector('input[type="text"]');
     const emailInput = form.querySelector('input[type="email"]');
@@ -883,15 +659,8 @@ async function handleSignUp(form) {
     const email = emailInput?.value?.trim();
     const password = passwordInput?.value;
     
-    console.log('🔵 Sign Up attempt:', email, fullName);
-    
-    if (!email || !password) {
-        alert('Please enter email and password');
-        return;
-    }
-    
-    if (!fullName) {
-        alert('Please enter your full name');
+    if (!email || !password || !fullName) {
+        alert('Please fill in all fields');
         return;
     }
     
@@ -906,11 +675,9 @@ async function handleSignUp(form) {
         return;
     }
     
-    showLoadingState();
-    
+    showActionLoading();
     const result = await signUpUser(email, password, fullName);
-    
-    hideLoadingState();
+    hideActionLoading();
     
     if (!result.success) {
         let errorMessage = result.error;
@@ -993,20 +760,6 @@ function initProfileDropdown() {
                 profileContainer.classList.remove('active');
             }
         });
-        
-        const profileSignoutBtn = profileContainer.querySelector('.profile-signout-btn');
-        if (profileSignoutBtn) {
-            profileSignoutBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const signoutModal = document.querySelector('.signout-modal');
-                if (signoutModal) {
-                    signoutModal.classList.add('show');
-                    signoutModal.style.display = 'flex';
-                    document.body.style.overflow = 'hidden';
-                    profileContainer.classList.remove('active');
-                }
-            });
-        }
     }
 }
 
@@ -1042,8 +795,6 @@ function initFileUpload() {
 function renderTransactions() {
     const transactionList = document.querySelector('.transaction-list');
     if (!transactionList) return;
-    
-    console.log('Rendering transactions, count:', transactions.length);
     
     if (transactions.length === 0) {
         transactionList.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 40px;">No transactions yet. Add your first transaction!</p>';
@@ -1083,12 +834,10 @@ function renderTransactions() {
     </div>
 `;
     }).join('');
-    
-    console.log('Transactions rendered successfully');
 }
 
 // ==========================================
-// CATEGORIES PAGE
+// CATEGORIES
 // ==========================================
 
 function renderCategories() {
@@ -1108,10 +857,6 @@ function renderCategories() {
     if (incomeCategories.length === 0) {
         incomeContainer.innerHTML = `
             <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
-                </svg>
                 <h3>No Income Categories</h3>
                 <p>Add your first income category to get started</p>
             </div>
@@ -1123,10 +868,6 @@ function renderCategories() {
     if (expenseCategories.length === 0) {
         expenseContainer.innerHTML = `
             <div class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                    <line x1="7" y1="7" x2="7.01" y2="7"></line>
-                </svg>
                 <h3>No Expense Categories</h3>
                 <p>Add your first expense category to get started</p>
             </div>
@@ -1237,12 +978,12 @@ window.closeDeleteModal = function() {
 window.confirmDeleteCategory = async function() {
     if (categoryToDelete === null || !currentUser) return;
     
-    showLoadingState();
+    showActionLoading();
     const result = await deleteCategory(currentUser.uid, categoryToDelete);
-    hideLoadingState();
+    hideActionLoading();
     
     if (result.success) {
-        await loadUserData();
+        await loadUserDataSilently();
         window.closeDeleteModal();
         alert('Category deleted successfully!');
     } else {
@@ -1272,14 +1013,14 @@ function initCategoryForm() {
             return;
         }
         
-        showLoadingState();
+        showActionLoading();
         
         if (currentEditId) {
             const result = await updateCategory(currentUser.uid, currentEditId, { name, type, color });
-            hideLoadingState();
+            hideActionLoading();
             
             if (result.success) {
-                await loadUserData();
+                await loadUserDataSilently();
                 window.closeCategoryModal();
                 alert('Category updated successfully!');
             } else {
@@ -1287,10 +1028,10 @@ function initCategoryForm() {
             }
         } else {
             const result = await addCategory(currentUser.uid, { name, type, color });
-            hideLoadingState();
+            hideActionLoading();
             
             if (result.success) {
-                await loadUserData();
+                await loadUserDataSilently();
                 window.closeCategoryModal();
                 alert('Category added successfully!');
             } else {
@@ -1359,8 +1100,7 @@ function initSettingsPage() {
             if (newName) {
                 const result = await updateUserProfile(currentUser.uid, { name: newName });
                 if (result.success) {
-                    console.log('Name updated');
-                    await loadUserData();
+                    await loadUserDataSilently();
                 }
             }
         });
@@ -1402,23 +1142,8 @@ function exportToCSV() {
 }
 
 // ==========================================
-// WINDOW RESIZE HANDLER
+// TRANSACTION HANDLERS
 // ==========================================
-
-let resizeTimer;
-window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-        const mobileMenu = document.querySelector('.mobile-menu');
-        if (window.innerWidth > 768 && mobileMenu) {
-            mobileMenu.style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-    }, 250);
-});
-
-console.log('✅ Finance Tracker fully initialized and ready!');
-
 
 window.editTransactionHandler = function(id) {
     openTransactionModal(id);
@@ -1454,15 +1179,17 @@ window.closeDeleteTransactionModal = function() {
 window.confirmDeleteTransaction = async function() {
     if (!transactionToDelete || !currentUser) return;
     
-    showLoadingState();
+    showActionLoading();
     const result = await deleteTransaction(currentUser.uid, transactionToDelete);
-    hideLoadingState();
+    hideActionLoading();
     
     if (result.success) {
-        await loadUserData();
+        await loadUserDataSilently();
         closeDeleteTransactionModal();
         alert('Transaction deleted successfully!');
     } else {
         alert('Error deleting transaction: ' + result.error);
     }
 };
+
+console.log('✅ App initialized and ready!');

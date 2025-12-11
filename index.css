@@ -1809,7 +1809,3 @@ nav {
     }
 }
 
-/* Prevent content shift during loading */
-.main-content[style*="visibility: hidden"] {
-    min-height: 100vh;
-}
