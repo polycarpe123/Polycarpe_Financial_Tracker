@@ -37,20 +37,28 @@ let transactionToDelete = null;
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        console.log('User signed in:', user.email);
+        console.log('✅ User signed in:', user.email);
         
+        // If on landing page, redirect to dashboard
         if (document.querySelector('.landing-page')) {
+            console.log('📍 On landing page, redirecting to Dashboard...');
             window.location.href = 'Dashboard.html';
         } else {
+            // Display user info immediately from auth object
+            displayUserFromAuth(user);
+            
+            // Then show loading and load full data
             showPageLoadingState();
             await loadUserData();
             hidePageLoadingState();
         }
     } else {
         currentUser = null;
-        console.log('User signed out');
+        console.log('❌ User signed out');
         
+        // If not on landing page, redirect to login
         if (!document.querySelector('.landing-page')) {
+            console.log('📍 Not on landing page, redirecting to login...');
             window.location.href = 'index.html';
         }
     }
@@ -61,36 +69,69 @@ onAuthStateChanged(auth, async (user) => {
 // ==========================================
 
 async function loadUserData() {
-    if (!currentUser) return;
+    if (!currentUser) {
+        console.error('❌ No current user');
+        return;
+    }
     
     try {
+        console.log('📊 Loading user data for:', currentUser.uid);
+        
+        // 1. Get user profile
         const profileResult = await getUserProfile(currentUser.uid);
         if (profileResult.success) {
+            console.log('✅ Profile loaded:', profileResult.data);
             updateUIWithUserProfile(profileResult.data);
+        } else {
+            console.error('❌ Failed to load profile:', profileResult.error);
+            // If profile doesn't exist, create one
+            console.log('🔄 Creating missing profile...');
+            const profileData = {
+                name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
+                email: currentUser.email,
+                currency: 'USD',
+                notifications: true
+            };
+            await updateUserProfile(currentUser.uid, profileData);
+            updateUIWithUserProfile(profileData);
         }
         
+        // 2. Get categories
         const categoriesResult = await getCategories(currentUser.uid);
         if (categoriesResult.success) {
             categories = categoriesResult.data;
+            console.log('✅ Categories loaded:', categories.length);
             
+            // If no categories, initialize defaults
             if (categories.length === 0) {
+                console.log('🔄 No categories found, initializing defaults...');
                 await initializeDefaultCategories(currentUser.uid);
                 const newCategoriesResult = await getCategories(currentUser.uid);
                 categories = newCategoriesResult.data;
+                console.log('✅ Default categories created:', categories.length);
             }
             
             renderCategories();
             loadCategoriesIntoDropdowns();
+        } else {
+            console.error('❌ Failed to load categories:', categoriesResult.error);
         }
         
+        // 3. Get transactions
         const transactionsResult = await getTransactions(currentUser.uid);
         if (transactionsResult.success) {
             transactions = transactionsResult.data;
+            console.log('✅ Transactions loaded:', transactions.length);
             renderTransactions();
             updateDashboardStats();
+        } else {
+            console.error('❌ Failed to load transactions:', transactionsResult.error);
         }
+        
+        console.log('✅ All user data loaded successfully');
+        
     } catch (error) {
-        console.error('Error loading user data:', error);
+        console.error('❌ Error loading user data:', error);
         alert('Error loading data. Please refresh the page.');
     }
 }
@@ -100,26 +141,90 @@ async function loadUserData() {
 // ==========================================
 
 function updateUIWithUserProfile(profile) {
-    const userNameElements = document.querySelectorAll('#topNavUserName, #dropdownUserName');
-    userNameElements.forEach(el => {
-        if (el) el.textContent = profile.name || 'User';
-    });
+    console.log('🔄 Updating UI with profile:', profile);
     
-    const userEmailElements = document.querySelectorAll('#topNavUserEmail, #dropdownUserEmail');
-    userEmailElements.forEach(el => {
-        if (el) el.textContent = profile.email || '';
-    });
+    // Top Navigation Bar - User Name
+    const topNavUserName = document.getElementById('topNavUserName');
+    if (topNavUserName) {
+        topNavUserName.textContent = profile.name || profile.email?.split('@')[0] || 'User';
+        console.log('✅ Updated top nav user name');
+    } else {
+        console.warn('⚠️ topNavUserName element not found');
+    }
     
+    // Top Navigation Bar - User Email
+    const topNavUserEmail = document.getElementById('topNavUserEmail');
+    if (topNavUserEmail) {
+        topNavUserEmail.textContent = profile.email || '';
+        console.log('✅ Updated top nav user email');
+    } else {
+        console.warn('⚠️ topNavUserEmail element not found');
+    }
+    
+    // Profile Dropdown - User Name
+    const dropdownUserName = document.getElementById('dropdownUserName');
+    if (dropdownUserName) {
+        dropdownUserName.textContent = profile.name || profile.email?.split('@')[0] || 'User';
+        console.log('✅ Updated dropdown user name');
+    } else {
+        console.warn('⚠️ dropdownUserName element not found');
+    }
+    
+    // Profile Dropdown - User Email
+    const dropdownUserEmail = document.getElementById('dropdownUserEmail');
+    if (dropdownUserEmail) {
+        dropdownUserEmail.textContent = profile.email || '';
+        console.log('✅ Updated dropdown user email');
+    } else {
+        console.warn('⚠️ dropdownUserEmail element not found');
+    }
+    
+    // Settings Page - Name Input
     const nameInput = document.getElementById('name');
-    if (nameInput) nameInput.value = profile.name || '';
+    if (nameInput) {
+        nameInput.value = profile.name || '';
+        console.log('✅ Updated settings name input');
+    }
     
+    // Settings Page - Email Input
     const emailInput = document.getElementById('email');
-    if (emailInput) emailInput.value = profile.email || '';
+    if (emailInput) {
+        emailInput.value = profile.email || '';
+        console.log('✅ Updated settings email input');
+    }
     
+    // Settings Page - Currency Select
     const currencySelect = document.getElementById('currency');
     if (currencySelect && profile.currency) {
         currencySelect.value = profile.currency;
+        console.log('✅ Updated settings currency');
     }
+    
+    console.log('✅ UI update complete');
+}
+
+function displayUserFromAuth(user) {
+    console.log('🔄 Displaying user from auth object:', user.email);
+    
+    // Use email as fallback if profile isn't loaded yet
+    const displayName = user.displayName || user.email?.split('@')[0] || 'User';
+    const email = user.email || '';
+    
+    // Update top nav
+    const topNavUserName = document.getElementById('topNavUserName');
+    if (topNavUserName) topNavUserName.textContent = displayName;
+    
+    const topNavUserEmail = document.getElementById('topNavUserEmail');
+    if (topNavUserEmail) topNavUserEmail.textContent = email;
+    
+    // Update dropdown
+    const dropdownUserName = document.getElementById('dropdownUserName');
+    if (dropdownUserName) dropdownUserName.textContent = displayName;
+    
+    const dropdownUserEmail = document.getElementById('dropdownUserEmail');
+    if (dropdownUserEmail) dropdownUserEmail.textContent = email;
+    
+    console.log('✅ User displayed from auth');
 }
 
 function updateDashboardStats() {
@@ -693,16 +798,25 @@ function initModals() {
 // ==========================================
 
 function initAuthForms() {
-    const forms = document.querySelectorAll('form');
-    forms.forEach(form => {
-        if (form.closest('.landing-page')) {
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                await handleAuthSubmit(form);
-            });
-        }
-    });
+    // Handle Sign In Form (index.html)
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleSignIn(loginForm);
+        });
+    }
     
+    // Handle Sign Up Form (index_1.html)
+    const signupForm = document.getElementById('signup-form');
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleSignUp(signupForm);
+        });
+    }
+    
+    // Handle Google Sign In Button
     const googleBtn = document.querySelector('button[type="button"]');
     if (googleBtn && googleBtn.textContent.includes('Google')) {
         googleBtn.addEventListener('click', async (e) => {
@@ -718,14 +832,15 @@ function initAuthForms() {
     }
 }
 
-async function handleAuthSubmit(form) {
+// Handle Sign In
+async function handleSignIn(form) {
     const emailInput = form.querySelector('input[type="email"]');
     const passwordInput = form.querySelector('input[type="password"]');
-    const nameInput = form.querySelector('input[type="text"]');
     
     const email = emailInput?.value?.trim();
     const password = passwordInput?.value;
-    const fullName = nameInput?.value?.trim();
+    
+    console.log('🔵 Sign In attempt:', email);
     
     if (!email || !password) {
         alert('Please enter email and password');
@@ -743,21 +858,57 @@ async function handleAuthSubmit(form) {
         return;
     }
     
-    const isSignUp = document.querySelector('.auth-tabs .tab.active')?.textContent.trim() === 'Create Account';
+    showLoadingState();
+    
+    const result = await signInUser(email, password);
+    
+    hideLoadingState();
+    
+    if (!result.success) {
+        let errorMessage = result.error;
+        if (errorMessage.includes('wrong-password') || errorMessage.includes('user-not-found') || errorMessage.includes('invalid-credential')) {
+            errorMessage = 'Invalid email or password.';
+        }
+        alert('Error: ' + errorMessage);
+    }
+}
+
+// Handle Sign Up
+async function handleSignUp(form) {
+    const nameInput = form.querySelector('input[type="text"]');
+    const emailInput = form.querySelector('input[type="email"]');
+    const passwordInput = form.querySelector('input[type="password"]');
+    
+    const fullName = nameInput?.value?.trim();
+    const email = emailInput?.value?.trim();
+    const password = passwordInput?.value;
+    
+    console.log('🔵 Sign Up attempt:', email, fullName);
+    
+    if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+    }
+    
+    if (!fullName) {
+        alert('Please enter your full name');
+        return;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        alert('Please enter a valid email address');
+        return;
+    }
+
+    if (password.length < 8) {
+        alert('Password must be at least 8 characters long');
+        return;
+    }
     
     showLoadingState();
     
-    let result;
-    if (isSignUp) {
-        if (password.length < 8) {
-            hideLoadingState();
-            alert('Password must be at least 8 characters long');
-            return;
-        }
-        result = await signUpUser(email, password, fullName || email.split('@')[0]);
-    } else {
-        result = await signInUser(email, password);
-    }
+    const result = await signUpUser(email, password, fullName);
     
     hideLoadingState();
     
@@ -765,8 +916,6 @@ async function handleAuthSubmit(form) {
         let errorMessage = result.error;
         if (errorMessage.includes('email-already-in-use')) {
             errorMessage = 'This email is already registered. Please sign in instead.';
-        } else if (errorMessage.includes('wrong-password') || errorMessage.includes('user-not-found')) {
-            errorMessage = 'Invalid email or password.';
         } else if (errorMessage.includes('weak-password')) {
             errorMessage = 'Password is too weak. Please use a stronger password.';
         }
