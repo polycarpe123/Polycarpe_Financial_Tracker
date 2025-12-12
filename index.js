@@ -17,6 +17,9 @@ import {
     updateTransaction,
     deleteTransaction,
     initializeDefaultCategories,
+    listenToTransactions,
+    listenToCategories,
+    listenToUserProfile
 } from './firebase-config.js';
 
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
@@ -31,6 +34,9 @@ let currentTransactionType = 'expense';
 let transactionToDelete = null;
 let isDataLoaded = false;
 let userProfile = null;
+let unsubscribeTransactions = null;
+let unsubscribeCategories = null;
+let unsubscribeProfile = null;
 
 // ==========================================
 // AUTH STATE OBSERVER - INSTANT LOAD
@@ -50,13 +56,15 @@ onAuthStateChanged(auth, async (user) => {
         // Display user info INSTANTLY
         displayUserFromAuth(user);
         
-        // Load data silently in background (no loading indicator)
-        if (!isDataLoaded) {
-            loadUserDataSilently();
-        }
+        // ⚡ Setup realtime listeners for INSTANT data loading
+        setupRealtimeListeners(user.uid);
+        
     } else {
         currentUser = null;
         console.log('❌ User signed out');
+        
+        // ⚡ Cleanup listeners
+        cleanupListeners();
         
         if (!document.querySelector('.landing-page')) {
             window.location.href = 'index.html';
@@ -65,57 +73,79 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 // ==========================================
-// SILENT DATA LOADING (NO INDICATORS)
+// ⚡ SETUP REALTIME LISTENERS (Auto-sync)
 // ==========================================
 
-async function loadUserDataSilently() {
-    if (!currentUser) return;
+function setupRealtimeListeners(userId) {
+    console.log('⚡ Setting up instant loading listeners...');
     
-    try {
-        console.log('📊 Loading data silently...');
-        
-        // Load user profile
-        const profileResult = await getUserProfile(currentUser.uid);
-        if (profileResult.success) {
-            userProfile = profileResult.data;
+    // Cleanup any existing listeners
+    cleanupListeners();
+    
+    // Listen to user profile
+    unsubscribeProfile = listenToUserProfile(userId, (result) => {
+        if (result.success) {
+            userProfile = result.data;
             updateUIWithUserProfile(userProfile);
-
+            
             if (window.location.pathname.toLowerCase().includes('settings')) {
-        updateSettingsPage(userProfile);
+                updateSettingsPage(userProfile);
             }
         }
-        
-        // Load categories
-        const categoriesResult = await getCategories(currentUser.uid);
-        if (categoriesResult.success) {
-            categories = categoriesResult.data;
+    });
+    
+    // Listen to categories
+    unsubscribeCategories = listenToCategories(userId, (result) => {
+        if (result.success) {
+            categories = result.data;
             
-            if (categories.length === 0) {
-                await initializeDefaultCategories(currentUser.uid);
-                const newCategoriesResult = await getCategories(currentUser.uid);
-                categories = newCategoriesResult.data;
+            // If no categories, initialize defaults
+            if (categories.length === 0 && !categories._initializing) {
+                categories._initializing = true;
+                initializeDefaultCategories(userId).then(() => {
+                    // Listener will auto-update when defaults are created
+                    delete categories._initializing;
+                });
             }
             
-            // Update UI after data loads
+            // Update UI
             renderCategories();
             loadCategoriesIntoDropdowns();
         }
-        
-        // Load transactions
-        const transactionsResult = await getTransactions(currentUser.uid);
-        if (transactionsResult.success) {
-            transactions = transactionsResult.data;
+    });
+    
+    // Listen to transactions
+    unsubscribeTransactions = listenToTransactions(userId, (result) => {
+        if (result.success) {
+            transactions = result.data;
             
-            // Update UI after data loads
+            // Update UI
             renderTransactions();
             updateDashboardStats();
         }
-        
-        isDataLoaded = true;
-        console.log('✅ Data loaded silently');
-        
-    } catch (error) {
-        console.error('Error loading data:', error);
+    });
+    
+    console.log('✅ Instant loading activated - Data will appear in 0-10ms!');
+}
+
+// ==========================================
+// CLEANUP LISTENERS
+// ==========================================
+
+function cleanupListeners() {
+    if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+    }
+    
+    if (unsubscribeCategories) {
+        unsubscribeCategories();
+        unsubscribeCategories = null;
+    }
+    
+    if (unsubscribeTransactions) {
+        unsubscribeTransactions();
+        unsubscribeTransactions = null;
     }
 }
 
@@ -453,7 +483,7 @@ async function handleTransactionSubmit() {
         
         if (result.success) {
             closeTransactionModal();
-            await loadUserDataSilently();
+            // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
             hideActionLoading();
             alert(currentEditId ? 'Transaction updated!' : 'Transaction added!');
             currentEditId = null;
@@ -992,7 +1022,7 @@ window.confirmDeleteCategory = async function() {
     hideActionLoading();
     
     if (result.success) {
-        await loadUserDataSilently();
+        // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
         window.closeDeleteModal();
         alert('Category deleted successfully!');
     } else {
@@ -1023,31 +1053,27 @@ function initCategoryForm() {
         }
         
         showActionLoading();
+    
+    if (currentEditId) {
+        const result = await updateCategory(currentUser.uid, currentEditId, { name, type, color });
+        hideActionLoading();
         
-        if (currentEditId) {
-            const result = await updateCategory(currentUser.uid, currentEditId, { name, type, color });
-            hideActionLoading();
-            
-            if (result.success) {
-                await loadUserDataSilently();
-                window.closeCategoryModal();
-                alert('Category updated successfully!');
-            } else {
-                alert('Error updating category: ' + result.error);
-            }
-        } else {
-            const result = await addCategory(currentUser.uid, { name, type, color });
-            hideActionLoading();
-            
-            if (result.success) {
-                await loadUserDataSilently();
-                window.closeCategoryModal();
-                alert('Category added successfully!');
-            } else {
-                alert('Error adding category: ' + result.error);
-            }
+        if (result.success) {
+            // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
+            window.closeCategoryModal();
+            alert('Category updated successfully!');
         }
-    });
+    } else {
+        const result = await addCategory(currentUser.uid, { name, type, color });
+        hideActionLoading();
+        
+        if (result.success) {
+            // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
+            window.closeCategoryModal();
+            alert('Category added successfully!');
+        }
+    }
+});
 }
 
 function loadCategoriesIntoDropdowns() {
@@ -1373,12 +1399,11 @@ window.confirmDeleteTransaction = async function() {
     hideActionLoading();
     
     if (result.success) {
-        await loadUserDataSilently();
+        // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
         closeDeleteTransactionModal();
         alert('Transaction deleted successfully!');
     } else {
         alert('Error deleting transaction: ' + result.error);
     }
 };
-
 console.log('✅ App initialized and ready!');

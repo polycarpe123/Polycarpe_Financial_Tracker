@@ -1,4 +1,3 @@
-
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { 
     getAuth, 
@@ -7,7 +6,9 @@ import {
     signOut,
     onAuthStateChanged,
     GoogleAuthProvider,
-    signInWithPopup
+    signInWithPopup,
+    setPersistence,
+    browserLocalPersistence // ⚡ Keeps user logged in
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 import { 
     getFirestore, 
@@ -22,7 +23,9 @@ import {
     query,
     where,
     orderBy,
-    Timestamp
+    Timestamp,
+    onSnapshot, // ⚡ Realtime + caching
+    enableIndexedDbPersistence // ⚡ Offline support
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // Your Firebase configuration 
@@ -41,305 +44,149 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-console.log('🔥 Firebase initialized');
-console.log('📊 Firestore connected:', db ? 'Yes' : 'No');
-
 // ==========================================
-// AUTHENTICATION FUNCTIONS - FIXED
+// ⚡ ENABLE INSTANT LOADING FEATURES
 // ==========================================
 
-// Sign Up with Email/Password - COMPLETE FIX
-export async function signUpUser(email, password, fullName) {
-    let userCreated = null;
+// 1. Keep user logged in across sessions
+setPersistence(auth, browserLocalPersistence)
+    .then(() => {
+        console.log('✅ Auth persistence enabled');
+    })
+    .catch((error) => {
+        console.error('Auth persistence error:', error);
+    });
+
+// 2. Enable offline data persistence (IndexedDB)
+enableIndexedDbPersistence(db)
+    .then(() => {
+        console.log('✅ Offline persistence enabled - INSTANT LOADING activated');
+    })
+    .catch((err) => {
+        if (err.code === 'failed-precondition') {
+            console.warn('⚠️ Multiple tabs open - using memory cache');
+        } else if (err.code === 'unimplemented') {
+            console.warn('⚠️ Browser does not support offline persistence');
+        }
+    });
+
+console.log('🔥 Firebase initialized with instant loading');
+
+// ==========================================
+// REALTIME LISTENERS (Auto-sync + Instant reads)
+// ==========================================
+
+// These replace your old "get" functions
+// They provide INSTANT reads from cache + realtime updates
+
+export function listenToTransactions(userId, callback) {
+    const transactionsRef = collection(db, 'users', userId, 'transactions');
+    const q = query(transactionsRef, orderBy('date', 'desc'));
     
-    try {
-        console.log('🔵 Step 1: Creating auth user for:', email);
-        
-        // Step 1: Create authentication user
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        userCreated = userCredential.user;
-        console.log('✅ Auth user created with UID:', userCreated.uid);
-        
-        // Step 2: Prepare user profile data
-        const userProfile = {
-            name: fullName || email.split('@')[0],
-            email: email,
-            createdAt: Timestamp.now(),
-            currency: 'USD',
-            notifications: true
-        };
-        
-        console.log('🔵 Step 2: Creating Firestore profile document...');
-        console.log('Profile data:', userProfile);
-        
-        // Step 3: Create Firestore document
-        const userDocRef = doc(db, 'users', userCreated.uid);
-        await setDoc(userDocRef, userProfile);
-        
-        console.log('✅ Firestore profile created successfully');
-        
-        // Step 4: Verify the document was created
-        console.log('🔵 Step 3: Verifying Firestore document...');
-        const verifyDoc = await getDoc(userDocRef);
-        
-        if (verifyDoc.exists()) {
-            console.log('✅ Verification successful! Document exists:', verifyDoc.data());
-        } else {
-            throw new Error('Document creation failed - not found after setDoc');
-        }
-        
-        // Step 5: Initialize default categories
-        console.log('🔵 Step 4: Creating default categories...');
-        await initializeDefaultCategories(userCreated.uid);
-        console.log('✅ Default categories created');
-        
-        console.log('🎉 Sign up completed successfully!');
-        return { success: true, user: userCreated };
-        
-    } catch (error) {
-        console.error('❌ SIGN UP ERROR:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        console.error('Full error:', error);
-        
-        // Cleanup: Delete auth user if Firestore failed
-        if (userCreated) {
-            console.log('⚠️ Cleaning up auth user due to Firestore error...');
-            try {
-                await userCreated.delete();
-                console.log('✅ Auth user cleaned up');
-            } catch (cleanupError) {
-                console.error('❌ Cleanup failed:', cleanupError);
+    // onSnapshot uses cache first (INSTANT), then syncs
+    const unsubscribe = onSnapshot(q, 
+        { includeMetadataChanges: true }, // Show cache status
+        (querySnapshot) => {
+            const transactions = [];
+            
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                transactions.push({ 
+                    id: doc.id, 
+                    ...data,
+                    date: data.date.toDate(),
+                    _fromCache: querySnapshot.metadata.fromCache // Track if from cache
+                });
+            });
+            
+            // Log performance
+            if (querySnapshot.metadata.fromCache) {
+                console.log('⚡ Transactions loaded from cache (INSTANT)');
+            } else {
+                console.log('🔄 Transactions synced from server');
             }
-        }
-        
-        // Return user-friendly error message
-        let errorMessage = error.message;
-        if (error.code === 'permission-denied') {
-            errorMessage = 'Database permission denied. Please check Firestore security rules.';
-        } else if (error.code === 'unavailable') {
-            errorMessage = 'Database unavailable. Please check your internet connection.';
-        }
-        
-        return { success: false, error: errorMessage };
-    }
-}
-
-// Sign In with Email/Password
-export async function signInUser(email, password) {
-    try {
-        console.log('🔵 Signing in:', email);
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        console.log('✅ Sign in successful:', userCredential.user.uid);
-        
-        // Verify Firestore profile exists
-        const userDocRef = doc(db, 'users', userCredential.user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (!userDoc.exists()) {
-            console.warn('⚠️ User profile not found in Firestore, creating it now...');
-            const userProfile = {
-                name: userCredential.user.email.split('@')[0],
-                email: userCredential.user.email,
-                createdAt: Timestamp.now(),
-                currency: 'USD',
-                notifications: true
-            };
-            await setDoc(userDocRef, userProfile);
-            await initializeDefaultCategories(userCredential.user.uid);
-            console.log('✅ Created missing user profile');
-        }
-        
-        return { success: true, user: userCredential.user };
-    } catch (error) {
-        console.error('❌ Sign in error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Sign In with Google - FIXED
-export async function signInWithGoogle() {
-    try {
-        console.log('🔵 Starting Google sign in...');
-        const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        console.log('✅ Google auth successful:', user.uid);
-        
-        // Check if user profile exists
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        if (!userDoc.exists()) {
-            console.log('🔵 Creating new Google user profile...');
-            const userProfile = {
-                name: user.displayName || user.email.split('@')[0],
-                email: user.email,
-                createdAt: Timestamp.now(),
-                currency: 'USD',
-                notifications: true
-            };
             
-            await setDoc(userDocRef, userProfile);
-            console.log('✅ Google user profile created');
-            
-            await initializeDefaultCategories(user.uid);
-            console.log('✅ Default categories created');
-        } else {
-            console.log('✅ Existing Google user found');
+            callback({ success: true, data: transactions });
+        },
+        (error) => {
+            console.error('❌ Transaction listener error:', error);
+            callback({ success: false, error: error.message });
         }
-        
-        return { success: true, user };
-    } catch (error) {
-        console.error('❌ Google sign in error:', error);
-        return { success: false, error: error.message };
-    }
+    );
+    
+    return unsubscribe; // Call this to stop listening
 }
 
-// Sign Out
-export async function signOutUser() {
-    try {
-        console.log('🔵 Signing out...');
-        await signOut(auth);
-        console.log('✅ Sign out successful');
-        return { success: true };
-    } catch (error) {
-        console.error('❌ Sign out error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Get Current User Profile - ENHANCED
-export async function getUserProfile(userId) {
-    try {
-        console.log('🔵 Fetching user profile for:', userId);
-        const docRef = doc(db, 'users', userId);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-            console.log('✅ User profile found:', docSnap.data());
-            return { success: true, data: docSnap.data() };
-        } else {
-            console.error('❌ User profile not found in Firestore');
-            console.log('Attempting to create profile from auth data...');
+export function listenToCategories(userId, callback) {
+    const categoriesRef = collection(db, 'users', userId, 'categories');
+    
+    const unsubscribe = onSnapshot(categoriesRef,
+        { includeMetadataChanges: true },
+        (querySnapshot) => {
+            const categories = [];
             
-            // Try to create profile if missing
-            if (auth.currentUser) {
-                const userProfile = {
-                    name: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
-                    email: auth.currentUser.email,
-                    createdAt: Timestamp.now(),
-                    currency: 'USD',
-                    notifications: true
-                };
+            querySnapshot.forEach((doc) => {
+                categories.push({ 
+                    id: doc.id, 
+                    ...doc.data(),
+                    _fromCache: querySnapshot.metadata.fromCache
+                });
+            });
+            
+            if (querySnapshot.metadata.fromCache) {
+                console.log('⚡ Categories loaded from cache (INSTANT)');
+            } else {
+                console.log('🔄 Categories synced from server');
+            }
+            
+            callback({ success: true, data: categories });
+        },
+        (error) => {
+            console.error('❌ Category listener error:', error);
+            callback({ success: false, error: error.message });
+        }
+    );
+    
+    return unsubscribe;
+}
+
+export function listenToUserProfile(userId, callback) {
+    const docRef = doc(db, 'users', userId);
+    
+    const unsubscribe = onSnapshot(docRef,
+        { includeMetadataChanges: true },
+        (docSnap) => {
+            if (docSnap.exists()) {
+                const fromCache = docSnap.metadata.fromCache;
                 
-                await setDoc(docRef, userProfile);
-                console.log('✅ Created missing profile');
-                return { success: true, data: userProfile };
+                if (fromCache) {
+                    console.log('⚡ Profile loaded from cache (INSTANT)');
+                } else {
+                    console.log('🔄 Profile synced from server');
+                }
+                
+                callback({ success: true, data: docSnap.data() });
+            } else {
+                callback({ success: false, error: 'Profile not found' });
             }
-            
-            return { success: false, error: 'User profile not found' };
+        },
+        (error) => {
+            console.error('❌ Profile listener error:', error);
+            callback({ success: false, error: error.message });
         }
-    } catch (error) {
-        console.error('❌ Get user profile error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Update User Profile
-export async function updateUserProfile(userId, updates) {
-    try {
-        console.log('🔵 Updating user profile:', userId, updates);
-        const docRef = doc(db, 'users', userId);
-        await updateDoc(docRef, updates);
-        console.log('✅ User profile updated');
-        return { success: true };
-    } catch (error) {
-        console.error('❌ Update profile error:', error);
-        return { success: false, error: error.message };
-    }
+    );
+    
+    return unsubscribe;
 }
 
 // ==========================================
-// CATEGORY FUNCTIONS
+// KEEP OLD FUNCTIONS FOR COMPATIBILITY
+// But add note they're not instant
 // ==========================================
 
-// Get all categories for a user
-export async function getCategories(userId) {
-    try {
-        console.log('🔵 Fetching categories for:', userId);
-        const categoriesRef = collection(db, 'users', userId, 'categories');
-        const querySnapshot = await getDocs(categoriesRef);
-        
-        const categories = [];
-        querySnapshot.forEach((doc) => {
-            categories.push({ id: doc.id, ...doc.data() });
-        });
-        
-        console.log(`✅ Found ${categories.length} categories`);
-        return { success: true, data: categories };
-    } catch (error) {
-        console.error('❌ Get categories error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Add a new category
-export async function addCategory(userId, categoryData) {
-    try {
-        console.log('🔵 Adding category:', categoryData);
-        const categoriesRef = collection(db, 'users', userId, 'categories');
-        const docRef = await addDoc(categoriesRef, {
-            name: categoryData.name,
-            type: categoryData.type,
-            color: categoryData.color,
-            createdAt: Timestamp.now()
-        });
-        
-        console.log('✅ Category added:', docRef.id);
-        return { success: true, id: docRef.id };
-    } catch (error) {
-        console.error('❌ Add category error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Update a category
-export async function updateCategory(userId, categoryId, updates) {
-    try {
-        console.log('🔵 Updating category:', categoryId);
-        const categoryRef = doc(db, 'users', userId, 'categories', categoryId);
-        await updateDoc(categoryRef, updates);
-        console.log('✅ Category updated');
-        return { success: true };
-    } catch (error) {
-        console.error('❌ Update category error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Delete a category
-export async function deleteCategory(userId, categoryId) {
-    try {
-        console.log('🔵 Deleting category:', categoryId);
-        const categoryRef = doc(db, 'users', userId, 'categories', categoryId);
-        await deleteDoc(categoryRef);
-        console.log('✅ Category deleted');
-        return { success: true };
-    } catch (error) {
-        console.error('❌ Delete category error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// ==========================================
-// TRANSACTION FUNCTIONS
-// ==========================================
-
-// Get all transactions for a user
 export async function getTransactions(userId) {
+    console.warn('⚠️ Using non-instant getTransactions. Switch to listenToTransactions for instant loading.');
     try {
-        console.log('🔵 Fetching transactions for:', userId);
         const transactionsRef = collection(db, 'users', userId, 'transactions');
         const q = query(transactionsRef, orderBy('date', 'desc'));
         const querySnapshot = await getDocs(q);
@@ -350,12 +197,10 @@ export async function getTransactions(userId) {
             transactions.push({ 
                 id: doc.id, 
                 ...data,
-                // Convert Firestore Timestamp to JS Date
                 date: data.date.toDate()
             });
         });
         
-        console.log(`✅ Found ${transactions.length} transactions`);
         return { success: true, data: transactions };
     } catch (error) {
         console.error('❌ Get transactions error:', error);
@@ -363,10 +208,183 @@ export async function getTransactions(userId) {
     }
 }
 
-// Add a new transaction
+export async function getCategories(userId) {
+    console.warn('⚠️ Using non-instant getCategories. Switch to listenToCategories for instant loading.');
+    try {
+        const categoriesRef = collection(db, 'users', userId, 'categories');
+        const querySnapshot = await getDocs(categoriesRef);
+        
+        const categories = [];
+        querySnapshot.forEach((doc) => {
+            categories.push({ id: doc.id, ...doc.data() });
+        });
+        
+        return { success: true, data: categories };
+    } catch (error) {
+        console.error('❌ Get categories error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function getUserProfile(userId) {
+    console.warn('⚠️ Using non-instant getUserProfile. Switch to listenToUserProfile for instant loading.');
+    try {
+        const docRef = doc(db, 'users', userId);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+            return { success: true, data: docSnap.data() };
+        } else {
+            return { success: false, error: 'User profile not found' };
+        }
+    } catch (error) {
+        console.error('❌ Get user profile error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ==========================================
+// WRITE OPERATIONS (Keep as-is, work with listeners)
+// ==========================================
+
+export async function signUpUser(email, password, fullName) {
+    let userCreated = null;
+    
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        userCreated = userCredential.user;
+        
+        const userProfile = {
+            name: fullName || email.split('@')[0],
+            email: email,
+            createdAt: Timestamp.now(),
+            currency: 'USD',
+            notifications: true
+        };
+        
+        const userDocRef = doc(db, 'users', userCreated.uid);
+        await setDoc(userDocRef, userProfile);
+        
+        await initializeDefaultCategories(userCreated.uid);
+        
+        return { success: true, user: userCreated };
+        
+    } catch (error) {
+        console.error('❌ Sign up error:', error);
+        
+        if (userCreated) {
+            try {
+                await userCreated.delete();
+            } catch (cleanupError) {
+                console.error('Cleanup failed:', cleanupError);
+            }
+        }
+        
+        return { success: false, error: error.message };
+    }
+}
+
+export async function signInUser(email, password) {
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        return { success: true, user: userCredential.user };
+    } catch (error) {
+        console.error('❌ Sign in error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function signInWithGoogle() {
+    try {
+        const provider = new GoogleAuthProvider();
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+            const userProfile = {
+                name: user.displayName || user.email.split('@')[0],
+                email: user.email,
+                createdAt: Timestamp.now(),
+                currency: 'USD',
+                notifications: true
+            };
+            
+            await setDoc(userDocRef, userProfile);
+            await initializeDefaultCategories(user.uid);
+        }
+        
+        return { success: true, user };
+    } catch (error) {
+        console.error('❌ Google sign in error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function signOutUser() {
+    try {
+        await signOut(auth);
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Sign out error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateUserProfile(userId, updates) {
+    try {
+        const docRef = doc(db, 'users', userId);
+        await updateDoc(docRef, updates);
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Update profile error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function addCategory(userId, categoryData) {
+    try {
+        const categoriesRef = collection(db, 'users', userId, 'categories');
+        const docRef = await addDoc(categoriesRef, {
+            name: categoryData.name,
+            type: categoryData.type,
+            color: categoryData.color,
+            createdAt: Timestamp.now()
+        });
+        
+        return { success: true, id: docRef.id };
+    } catch (error) {
+        console.error('❌ Add category error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function updateCategory(userId, categoryId, updates) {
+    try {
+        const categoryRef = doc(db, 'users', userId, 'categories', categoryId);
+        await updateDoc(categoryRef, updates);
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Update category error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function deleteCategory(userId, categoryId) {
+    try {
+        const categoryRef = doc(db, 'users', userId, 'categories', categoryId);
+        await deleteDoc(categoryRef);
+        return { success: true };
+    } catch (error) {
+        console.error('❌ Delete category error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 export async function addTransaction(userId, transactionData) {
     try {
-        console.log('🔵 Adding transaction:', transactionData);
         const transactionsRef = collection(db, 'users', userId, 'transactions');
         const docRef = await addDoc(transactionsRef, {
             amount: parseFloat(transactionData.amount),
@@ -377,7 +395,6 @@ export async function addTransaction(userId, transactionData) {
             createdAt: Timestamp.now()
         });
         
-        console.log('✅ Transaction added:', docRef.id);
         return { success: true, id: docRef.id };
     } catch (error) {
         console.error('❌ Add transaction error:', error);
@@ -385,19 +402,15 @@ export async function addTransaction(userId, transactionData) {
     }
 }
 
-// Update a transaction
 export async function updateTransaction(userId, transactionId, updates) {
     try {
-        console.log('🔵 Updating transaction:', transactionId);
         const transactionRef = doc(db, 'users', userId, 'transactions', transactionId);
         
-        // Convert date to Timestamp if it exists in updates
         if (updates.date && !(updates.date instanceof Timestamp)) {
             updates.date = Timestamp.fromDate(new Date(updates.date));
         }
         
         await updateDoc(transactionRef, updates);
-        console.log('✅ Transaction updated');
         return { success: true };
     } catch (error) {
         console.error('❌ Update transaction error:', error);
@@ -405,84 +418,16 @@ export async function updateTransaction(userId, transactionId, updates) {
     }
 }
 
-// Delete a transaction
 export async function deleteTransaction(userId, transactionId) {
     try {
-        console.log('🔵 Deleting transaction:', transactionId);
         const transactionRef = doc(db, 'users', userId, 'transactions', transactionId);
         await deleteDoc(transactionRef);
-        console.log('✅ Transaction deleted');
         return { success: true };
     } catch (error) {
         console.error('❌ Delete transaction error:', error);
         return { success: false, error: error.message };
     }
 }
-
-// Get transactions by category
-export async function getTransactionsByCategory(userId, category) {
-    try {
-        console.log('🔵 Fetching transactions by category:', category);
-        const transactionsRef = collection(db, 'users', userId, 'transactions');
-        const q = query(
-            transactionsRef, 
-            where('category', '==', category),
-            orderBy('date', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        
-        const transactions = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            transactions.push({ 
-                id: doc.id, 
-                ...data,
-                date: data.date.toDate()
-            });
-        });
-        
-        console.log(`✅ Found ${transactions.length} transactions for category`);
-        return { success: true, data: transactions };
-    } catch (error) {
-        console.error('❌ Get transactions by category error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// Get transactions by date range
-export async function getTransactionsByDateRange(userId, startDate, endDate) {
-    try {
-        console.log('🔵 Fetching transactions by date range');
-        const transactionsRef = collection(db, 'users', userId, 'transactions');
-        const q = query(
-            transactionsRef,
-            where('date', '>=', Timestamp.fromDate(startDate)),
-            where('date', '<=', Timestamp.fromDate(endDate)),
-            orderBy('date', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        
-        const transactions = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            transactions.push({ 
-                id: doc.id, 
-                ...data,
-                date: data.date.toDate()
-            });
-        });
-        
-        console.log(`✅ Found ${transactions.length} transactions in date range`);
-        return { success: true, data: transactions };
-    } catch (error) {
-        console.error('❌ Get transactions by date range error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-// ==========================================
-// INITIALIZE DEFAULT CATEGORIES
-// ==========================================
 
 export async function initializeDefaultCategories(userId) {
     const defaultCategories = [
@@ -495,11 +440,9 @@ export async function initializeDefaultCategories(userId) {
     ];
     
     try {
-        console.log('🔵 Initializing default categories for:', userId);
         for (const category of defaultCategories) {
             await addCategory(userId, category);
         }
-        console.log('✅ All default categories initialized');
         return { success: true };
     } catch (error) {
         console.error('❌ Initialize default categories error:', error);
@@ -507,4 +450,4 @@ export async function initializeDefaultCategories(userId) {
     }
 }
 
-console.log('✅ Firebase config module loaded successfully');
+console.log('✅ Firebase config loaded with INSTANT LOADING capabilities');
