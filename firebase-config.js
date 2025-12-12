@@ -1,5 +1,3 @@
-// Firebase Configuration and Helper Functions - FIXED VERSION
-// Replace with your actual Firebase config from Firebase Console
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { 
@@ -43,21 +41,26 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
+console.log('🔥 Firebase initialized');
+console.log('📊 Firestore connected:', db ? 'Yes' : 'No');
+
 // ==========================================
-// AUTHENTICATION FUNCTIONS
+// AUTHENTICATION FUNCTIONS - FIXED
 // ==========================================
 
 // Sign Up with Email/Password - COMPLETE FIX
 export async function signUpUser(email, password, fullName) {
+    let userCreated = null;
+    
     try {
-        console.log('🔵 Starting sign up for:', email);
+        console.log('🔵 Step 1: Creating auth user for:', email);
         
-        // Step 1: Create the authentication user
+        // Step 1: Create authentication user
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-        console.log('✅ Auth user created:', user.uid);
+        userCreated = userCredential.user;
+        console.log('✅ Auth user created with UID:', userCreated.uid);
         
-        // Step 2: Create the user profile document in Firestore
+        // Step 2: Prepare user profile data
         const userProfile = {
             name: fullName || email.split('@')[0],
             email: email,
@@ -66,20 +69,59 @@ export async function signUpUser(email, password, fullName) {
             notifications: true
         };
         
-        console.log('🔵 Creating Firestore profile:', userProfile);
+        console.log('🔵 Step 2: Creating Firestore profile document...');
+        console.log('Profile data:', userProfile);
         
-        await setDoc(doc(db, 'users', user.uid), userProfile);
+        // Step 3: Create Firestore document
+        const userDocRef = doc(db, 'users', userCreated.uid);
+        await setDoc(userDocRef, userProfile);
+        
         console.log('✅ Firestore profile created successfully');
         
-        // Step 3: Initialize default categories
-        console.log('🔵 Initializing default categories...');
-        await initializeDefaultCategories(user.uid);
+        // Step 4: Verify the document was created
+        console.log('🔵 Step 3: Verifying Firestore document...');
+        const verifyDoc = await getDoc(userDocRef);
+        
+        if (verifyDoc.exists()) {
+            console.log('✅ Verification successful! Document exists:', verifyDoc.data());
+        } else {
+            throw new Error('Document creation failed - not found after setDoc');
+        }
+        
+        // Step 5: Initialize default categories
+        console.log('🔵 Step 4: Creating default categories...');
+        await initializeDefaultCategories(userCreated.uid);
         console.log('✅ Default categories created');
         
-        return { success: true, user };
+        console.log('🎉 Sign up completed successfully!');
+        return { success: true, user: userCreated };
+        
     } catch (error) {
-        console.error('❌ Sign up error:', error);
-        return { success: false, error: error.message };
+        console.error('❌ SIGN UP ERROR:', error);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Full error:', error);
+        
+        // Cleanup: Delete auth user if Firestore failed
+        if (userCreated) {
+            console.log('⚠️ Cleaning up auth user due to Firestore error...');
+            try {
+                await userCreated.delete();
+                console.log('✅ Auth user cleaned up');
+            } catch (cleanupError) {
+                console.error('❌ Cleanup failed:', cleanupError);
+            }
+        }
+        
+        // Return user-friendly error message
+        let errorMessage = error.message;
+        if (error.code === 'permission-denied') {
+            errorMessage = 'Database permission denied. Please check Firestore security rules.';
+        } else if (error.code === 'unavailable') {
+            errorMessage = 'Database unavailable. Please check your internet connection.';
+        }
+        
+        return { success: false, error: errorMessage };
     }
 }
 
@@ -89,6 +131,25 @@ export async function signInUser(email, password) {
         console.log('🔵 Signing in:', email);
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         console.log('✅ Sign in successful:', userCredential.user.uid);
+        
+        // Verify Firestore profile exists
+        const userDocRef = doc(db, 'users', userCredential.user.uid);
+        const userDoc = await getDoc(userDocRef);
+        
+        if (!userDoc.exists()) {
+            console.warn('⚠️ User profile not found in Firestore, creating it now...');
+            const userProfile = {
+                name: userCredential.user.email.split('@')[0],
+                email: userCredential.user.email,
+                createdAt: Timestamp.now(),
+                currency: 'USD',
+                notifications: true
+            };
+            await setDoc(userDocRef, userProfile);
+            await initializeDefaultCategories(userCredential.user.uid);
+            console.log('✅ Created missing user profile');
+        }
+        
         return { success: true, user: userCredential.user };
     } catch (error) {
         console.error('❌ Sign in error:', error);
@@ -105,7 +166,7 @@ export async function signInWithGoogle() {
         const user = result.user;
         console.log('✅ Google auth successful:', user.uid);
         
-        // Check if user profile exists, if not create it
+        // Check if user profile exists
         const userDocRef = doc(db, 'users', user.uid);
         const userDoc = await getDoc(userDocRef);
         
@@ -122,11 +183,10 @@ export async function signInWithGoogle() {
             await setDoc(userDocRef, userProfile);
             console.log('✅ Google user profile created');
             
-            // Initialize default categories for new Google users
             await initializeDefaultCategories(user.uid);
-            console.log('✅ Default categories created for Google user');
+            console.log('✅ Default categories created');
         } else {
-            console.log('✅ Existing Google user profile found');
+            console.log('✅ Existing Google user found');
         }
         
         return { success: true, user };
@@ -149,7 +209,7 @@ export async function signOutUser() {
     }
 }
 
-// Get Current User Profile - ENHANCED WITH LOGGING
+// Get Current User Profile - ENHANCED
 export async function getUserProfile(userId) {
     try {
         console.log('🔵 Fetching user profile for:', userId);
@@ -161,6 +221,23 @@ export async function getUserProfile(userId) {
             return { success: true, data: docSnap.data() };
         } else {
             console.error('❌ User profile not found in Firestore');
+            console.log('Attempting to create profile from auth data...');
+            
+            // Try to create profile if missing
+            if (auth.currentUser) {
+                const userProfile = {
+                    name: auth.currentUser.displayName || auth.currentUser.email.split('@')[0],
+                    email: auth.currentUser.email,
+                    createdAt: Timestamp.now(),
+                    currency: 'USD',
+                    notifications: true
+                };
+                
+                await setDoc(docRef, userProfile);
+                console.log('✅ Created missing profile');
+                return { success: true, data: userProfile };
+            }
+            
             return { success: false, error: 'User profile not found' };
         }
     } catch (error) {
@@ -429,3 +506,5 @@ export async function initializeDefaultCategories(userId) {
         return { success: false, error: error.message };
     }
 }
+
+console.log('✅ Firebase config module loaded successfully');

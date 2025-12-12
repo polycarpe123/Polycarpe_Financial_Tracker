@@ -16,7 +16,7 @@ import {
     addTransaction,
     updateTransaction,
     deleteTransaction,
-    initializeDefaultCategories
+    initializeDefaultCategories,
 } from './firebase-config.js';
 
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
@@ -79,16 +79,10 @@ async function loadUserDataSilently() {
         if (profileResult.success) {
             userProfile = profileResult.data;
             updateUIWithUserProfile(userProfile);
-        } else {
-            // Create missing profile
-            userProfile = {
-                name: currentUser.displayName || currentUser.email?.split('@')[0] || 'User',
-                email: currentUser.email,
-                currency: 'USD',
-                notifications: true
-            };
-            await updateUserProfile(currentUser.uid, userProfile);
-            updateUIWithUserProfile(userProfile);
+
+            if (window.location.pathname.toLowerCase().includes('settings')) {
+        updateSettingsPage(userProfile);
+            }
         }
         
         // Load categories
@@ -102,6 +96,7 @@ async function loadUserDataSilently() {
                 categories = newCategoriesResult.data;
             }
             
+            // Update UI after data loads
             renderCategories();
             loadCategoriesIntoDropdowns();
         }
@@ -110,6 +105,8 @@ async function loadUserDataSilently() {
         const transactionsResult = await getTransactions(currentUser.uid);
         if (transactionsResult.success) {
             transactions = transactionsResult.data;
+            
+            // Update UI after data loads
             renderTransactions();
             updateDashboardStats();
         }
@@ -200,6 +197,18 @@ function updateDashboardStats() {
         statValues[1].textContent = `$${monthlyIncome.toFixed(2)}`;
         statValues[2].textContent = `$${monthlyExpense.toFixed(2)}`;
     }
+}
+
+function updateSettingsPage(profile) {
+    const nameInput = document.getElementById('name');
+    const emailInput = document.getElementById('email');
+    const currencySelect = document.getElementById('currency');
+    const notificationsCheckbox = document.getElementById('notifications');
+    
+    if (nameInput) nameInput.value = profile.name || '';
+    if (emailInput) emailInput.value = profile.email || '';
+    if (currencySelect) currencySelect.value = profile.currency || 'USD';
+    if (notificationsCheckbox) notificationsCheckbox.checked = profile.notifications !== false;
 }
 
 // Simple loading for user actions only (not page load)
@@ -1087,36 +1096,216 @@ function initCategoriesPage() {
 // ==========================================
 
 function initSettingsPage() {
+    // Export CSV
     const exportBtn = document.getElementById('export-csv-btn');
     if (exportBtn) {
         exportBtn.addEventListener('click', exportToCSV);
     }
     
+    // Update name on blur
     const nameInput = document.getElementById('name');
     if (nameInput) {
         nameInput.addEventListener('blur', async function() {
             if (!currentUser) return;
             const newName = this.value.trim();
-            if (newName) {
+            if (newName && newName !== userProfile?.name) {
+                showActionLoading();
                 const result = await updateUserProfile(currentUser.uid, { name: newName });
+                hideActionLoading();
                 if (result.success) {
-                    await loadUserDataSilently();
+                    userProfile.name = newName;
+                    updateUIWithUserProfile(userProfile);
+                    alert('Name updated successfully!');
                 }
             }
         });
     }
     
+    // Update currency
     const currencySelect = document.getElementById('currency');
     if (currencySelect) {
         currencySelect.addEventListener('change', async function() {
             if (!currentUser) return;
+            showActionLoading();
             const result = await updateUserProfile(currentUser.uid, { currency: this.value });
+            hideActionLoading();
             if (result.success) {
-                console.log('Currency updated');
+                alert('Currency updated successfully!');
             }
         });
     }
+    
+    // Update notifications
+    const notificationsCheckbox = document.getElementById('notifications');
+    if (notificationsCheckbox) {
+        notificationsCheckbox.addEventListener('change', async function() {
+            if (!currentUser) return;
+            const result = await updateUserProfile(currentUser.uid, { notifications: this.checked });
+            if (result.success) {
+                console.log('Notifications preference updated');
+            }
+        });
+    }
+    
+    // Change Password button
+    const changePasswordBtn = document.querySelector('.btn-secondary');
+if (changePasswordBtn && changePasswordBtn.textContent.includes('Change Password')) {
+    changePasswordBtn.addEventListener('click', openChangePasswordModal);
 }
+
+function openChangePasswordModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-dialog small">
+            <h2>🔒 Change Password</h2>
+            <form id="change-password-form">
+                <div class="form-group">
+                    <label>Current Password *</label>
+                    <input type="password" id="current-password" required>
+                </div>
+                <div class="form-group">
+                    <label>New Password *</label>
+                    <input type="password" id="new-password" minlength="6" required>
+                    <p class="help-text">At least 6 characters</p>
+                </div>
+                <div class="form-group">
+                    <label>Confirm New Password *</label>
+                    <input type="password" id="confirm-password" minlength="6" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow='auto'">Cancel</button>
+                    <button type="submit" class="btn-primary">Update Password</button>
+                </div>
+            </form>
+            <hr style="margin: 20px 0;">
+            <p style="text-align: center; color: #6b7280; font-size: 14px;">Forgot your password?</p>
+            <button type="button" class="btn-secondary full-width" onclick="sendPasswordResetLink()">Send Reset Email</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+    
+    // Handle form submission
+    document.getElementById('change-password-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const currentPwd = document.getElementById('current-password').value;
+        const newPwd = document.getElementById('new-password').value;
+        const confirmPwd = document.getElementById('confirm-password').value;
+        
+        if (newPwd !== confirmPwd) {
+            alert('New passwords do not match!');
+            return;
+        }
+        
+        if (newPwd.length < 6) {
+            alert('Password must be at least 6 characters');
+            return;
+        }
+        
+        showActionLoading();
+        const result = await changePassword(currentPwd, newPwd);
+        hideActionLoading();
+        
+        if (result.success) {
+            alert('Password changed successfully!');
+            modal.remove();
+            document.body.style.overflow = 'auto';
+        } else {
+            if (result.error.includes('wrong-password')) {
+                alert('Current password is incorrect');
+            } else {
+                alert('Error: ' + result.error);
+            }
+        }
+    });
+}
+
+window.sendPasswordResetLink = async function() {
+    if (!currentUser || !currentUser.email) return;
+    
+    const confirm = window.confirm(`Send password reset email to ${currentUser.email}?`);
+    if (!confirm) return;
+    
+    showActionLoading();
+    const result = await sendPasswordReset(currentUser.email);
+    hideActionLoading();
+    
+    if (result.success) {
+        alert('Password reset email sent! Check your inbox.');
+        document.querySelector('.modal-overlay').remove();
+        document.body.style.overflow = 'auto';
+    } else {
+        alert('Error: ' + result.error);
+    }
+};
+    
+    // Two-Factor Authentication button
+    const twoFactorBtn = document.querySelectorAll('.btn-secondary')[1];
+    if (twoFactorBtn && twoFactorBtn.textContent.includes('Two-Factor')) {
+        twoFactorBtn.addEventListener('click', function() {
+            alert('Two-Factor Authentication Setup:\n\n1. Download Google Authenticator or similar app\n2. Scan QR code (feature coming soon)\n3. Enter verification code\n\nThis feature will be available in the next update!');
+        });
+    }
+    
+    // Delete Account button
+    const deleteAccountBtn = document.getElementById('delete-account-btn');
+    if (deleteAccountBtn) {
+        deleteAccountBtn.addEventListener('click', openDeleteAccountModal);
+    }
+}
+
+// Add delete account modal handler
+function openDeleteAccountModal() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+        <div class="modal-dialog small">
+            <h2>⚠️ Delete Account?</h2>
+            <p style="color: #ef4444; font-weight: 500;">This action is PERMANENT and cannot be undone!</p>
+            <p>All your data including transactions, categories, and settings will be permanently deleted.</p>
+            <p>Type <strong>DELETE</strong> to confirm:</p>
+            <input type="text" id="delete-confirm-input" placeholder="Type DELETE" style="margin-bottom: 20px;">
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                <button class="btn-danger" onclick="confirmDeleteAccount()">Delete My Account</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+window.confirmDeleteAccount = async function() {
+    const input = document.getElementById('delete-confirm-input');
+    if (input.value !== 'DELETE') {
+        alert('Please type DELETE to confirm');
+        return;
+    }
+    
+    if (!currentUser) return;
+    
+    const finalConfirm = confirm('Are you ABSOLUTELY sure? This cannot be undone!');
+    if (!finalConfirm) return;
+    
+    showActionLoading();
+    
+    try {
+        // Delete user data from Firestore (transactions, categories, profile)
+        // Note: You'll need to add these delete functions to firebase-config.js
+        alert('Account deletion is not yet implemented.\n\nTo delete your account:\n1. Contact support\n2. Or manually delete from Firebase Console\n\nThis feature requires additional backend setup for security.');
+        
+        hideActionLoading();
+        document.querySelector('.modal-overlay').remove();
+        document.body.style.overflow = 'auto';
+    } catch (error) {
+        hideActionLoading();
+        alert('Error: ' + error.message);
+    }
+};
 
 function exportToCSV() {
     if (transactions.length === 0) {
