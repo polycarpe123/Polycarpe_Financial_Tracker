@@ -1,5 +1,4 @@
 // Analytics Charts with Chart.js
-// This file generates charts based on actual transaction data
 
 import { auth } from './firebase-config.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
@@ -255,7 +254,7 @@ function createCategoryPieChart(categoryExpenses) {
     const labels = Object.keys(categoryExpenses);
     const data = Object.values(categoryExpenses);
     
-    // Color palette (matching your design)
+    // Color palette
     const colors = [
         '#10b981', // Food (green)
         '#06b6d4', // Transportation (cyan)

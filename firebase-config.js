@@ -24,8 +24,8 @@ import {
     where,
     orderBy,
     Timestamp,
-    onSnapshot, // ⚡ Realtime + caching
-    enableIndexedDbPersistence // ⚡ Offline support
+    onSnapshot, // Realtime + caching
+    enableIndexedDbPersistence //  Offline support
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // Your Firebase configuration 
@@ -45,7 +45,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 
 // ==========================================
-// ⚡ ENABLE INSTANT LOADING FEATURES
+//  ENABLE INSTANT LOADING FEATURES
 // ==========================================
 
 // 1. Keep user logged in across sessions
@@ -76,8 +76,6 @@ console.log('🔥 Firebase initialized with instant loading');
 // REALTIME LISTENERS (Auto-sync + Instant reads)
 // ==========================================
 
-// These replace your old "get" functions
-// They provide INSTANT reads from cache + realtime updates
 
 export function listenToTransactions(userId, callback) {
     const transactionsRef = collection(db, 'users', userId, 'transactions');
@@ -180,8 +178,7 @@ export function listenToUserProfile(userId, callback) {
 }
 
 // ==========================================
-// KEEP OLD FUNCTIONS FOR COMPATIBILITY
-// But add note they're not instant
+// FUNCTIONS FOR COMPATIBILITY
 // ==========================================
 
 export async function getTransactions(userId) {
@@ -244,7 +241,7 @@ export async function getUserProfile(userId) {
 }
 
 // ==========================================
-// WRITE OPERATIONS (Keep as-is, work with listeners)
+// WRITE OPERATIONS (work with listeners)
 // ==========================================
 
 export async function signUpUser(email, password, fullName) {
