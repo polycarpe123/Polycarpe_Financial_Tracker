@@ -1022,7 +1022,7 @@ window.confirmDeleteCategory = async function() {
     hideActionLoading();
     
     if (result.success) {
-        // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
+        // REMOVED loadUserDataSilently() - realtime listener auto-updates!
         window.closeDeleteModal();
         alert('Category deleted successfully!');
     } else {
@@ -1059,7 +1059,7 @@ function initCategoryForm() {
         hideActionLoading();
         
         if (result.success) {
-            // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
+            // REMOVED loadUserDataSilently() - realtime listener auto-updates!
             window.closeCategoryModal();
             alert('Category updated successfully!');
         }
@@ -1068,7 +1068,7 @@ function initCategoryForm() {
         hideActionLoading();
         
         if (result.success) {
-            // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
+            // REMOVED loadUserDataSilently() - realtime listener auto-updates!
             window.closeCategoryModal();
             alert('Category added successfully!');
         }
@@ -1399,7 +1399,7 @@ window.confirmDeleteTransaction = async function() {
     hideActionLoading();
     
     if (result.success) {
-        // ⚡ REMOVED loadUserDataSilently() - realtime listener auto-updates!
+        // REMOVED loadUserDataSilently() - realtime listener auto-updates!
         closeDeleteTransactionModal();
         alert('Transaction deleted successfully!');
     } else {
